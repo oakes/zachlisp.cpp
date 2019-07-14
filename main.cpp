@@ -4,58 +4,71 @@
 #include <variant>
 #include <regex>
 
-struct TokenWrapper;
+struct DataWrapper;
 
-using TokenVector = std::vector<TokenWrapper>;
-using Token = std::variant<long, double, std::string, TokenVector>;
+using DataVector = std::vector<DataWrapper>;
+using Data = std::variant<long, double, std::string, DataVector>;
 
-struct TokenWrapper {
-    Token _data;
+struct DataWrapper {
+    Data _data;
 
     template <typename... Ts, typename = 
         std::enable_if_t // https://vittorioromeo.info/index/blog/variants_lambdas_part_2.html#libcpp_constraint
         <
             !std::disjunction_v
             <
-                std::is_same<std::decay_t<Ts>, TokenWrapper>...
+                std::is_same<std::decay_t<Ts>, DataWrapper>...
             >
         >
     >
-    TokenWrapper(Ts&&... xs)
+    DataWrapper(Ts&&... xs)
         : _data{std::forward<Ts>(xs)...}
     {
     }
 };
 
-void tokenize(std::string input) {
-    std::regex e(
-        "([\\s,]*)|" // whitespace
-        "(~@)|" // special two-characters
-        "([\\[\\]{}()\'`~^@])|" // special single characters
-        "(\"(?:\\\\.|[^\\\\\"])*\"?)|" // strings
-        "(;.*)|" // comments
-        "([^\\s\\[\\]{}(\'\"`,;)]*)" // symbols, numbers, etc
-    );
-    std::sregex_iterator it(input.begin(), input.end(), e);
+enum Type {Whitespace, SpliceUnquote, SpecialChar, String, Comment, Symbol};
+
+const std::regex TYPE(
+    "([\\s,]*)|" // Whitespace
+    "(~@)|" // SpliceUnquote
+    "([\\[\\]{}()\'`~^@])|" // SpecialChar
+    "(\"(?:\\\\.|[^\\\\\"])*\"?)|" // String
+    "(;.*)|" // Comment
+    "([^\\s\\[\\]{}(\'\"`,;)]*)" // Symbol
+);
+
+struct Token {
+    std::string value;
+    int position;
+    Type type;
+
+    Token(std::string v, int p, Type t) : value(v), position(p), type(t) {}
+};
+
+std::vector<std::shared_ptr<Token> > tokenize(std::string input) {
+    std::sregex_iterator begin(input.begin(), input.end(), TYPE);
     std::sregex_iterator end;
 
-    while (it != end) {
+    std::vector<std::shared_ptr<Token> > tokens;
+
+    for (std::sregex_iterator it = begin; it != end; ++it) {
         std::smatch match = *it;
-        std::string token = match.str();
-        int index = -1;
         for(auto i = 1; i < match.size(); ++i){
            if (!match[i].str().empty()) {
-               index = i-1;
-               std::cout << token << " at position " << match.position() << " with group " << index << std::endl;
+               int position = match.position();
+               int index = i-1;
+               auto token = std::make_shared<Token>(Token{match.str(), position, static_cast<Type>(index)});
+               tokens.push_back(token);
                break;
            }
         }
-        it++;
     }
+
+    return tokens;
 }
 
 std::string READ(const std::string input) {
-    tokenize(input);
     return input;
 }
 
