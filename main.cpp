@@ -1,6 +1,8 @@
 #include <iostream>
+#include <string>
 #include <vector>
 #include <variant>
+#include <regex>
 
 struct TokenWrapper;
 
@@ -25,7 +27,35 @@ struct TokenWrapper {
     }
 };
 
+void tokenize(std::string input) {
+    std::regex e(
+        "([\\s,]*)|" // whitespace
+        "(~@)|" // special two-characters
+        "([\\[\\]{}()\'`~^@])|" // special single characters
+        "(\"(?:\\\\.|[^\\\\\"])*\"?)|" // strings
+        "(;.*)|" // comments
+        "([^\\s\\[\\]{}(\'\"`,;)]*)" // symbols, numbers, etc
+    );
+    std::sregex_iterator it(input.begin(), input.end(), e);
+    std::sregex_iterator end;
+
+    while (it != end) {
+        std::smatch match = *it;
+        std::string token = match.str();
+        int index = -1;
+        for(auto i = 1; i < match.size(); ++i){
+           if (!match[i].str().empty()) {
+               index = i-1;
+               std::cout << token << " at position " << match.position() << " with group " << index << std::endl;
+               break;
+           }
+        }
+        it++;
+    }
+}
+
 std::string READ(const std::string input) {
+    tokenize(input);
     return input;
 }
 
