@@ -40,10 +40,11 @@ const std::regex TYPE(
 
 struct Token {
     std::string value;
-    int position;
     Type type;
+    int line;
+    int column;
 
-    Token(std::string v, int p, Type t) : value(v), position(p), type(t) {}
+    Token(std::string v, Type t, int l, int c) : value(v), type(t), line(l), column(c) {}
 };
 
 std::vector<std::shared_ptr<Token> > tokenize(std::string input) {
@@ -52,14 +53,17 @@ std::vector<std::shared_ptr<Token> > tokenize(std::string input) {
 
     std::vector<std::shared_ptr<Token> > tokens;
 
+    int line = 1;
+
     for (std::sregex_iterator it = begin; it != end; ++it) {
         std::smatch match = *it;
         for(auto i = 1; i < match.size(); ++i){
            if (!match[i].str().empty()) {
-               int position = match.position();
-               int index = i-1;
-               auto token = std::make_shared<Token>(Token{match.str(), position, static_cast<Type>(index)});
-               tokens.push_back(token);
+               std::string value = match.str();
+               Type type = static_cast<Type>(i-1);
+               int column = match.position() + 1;
+               tokens.push_back(std::make_shared<Token>(Token{value, type, line, column}));
+               line += std::count(value.begin(), value.end(), '\n');
                break;
            }
         }
