@@ -129,6 +129,15 @@ std::pair<Form, std::list<Token>::const_iterator> readList(const std::list<Token
     return std::make_pair(ReaderError{"No end delimiter found: " + endDelimiter, std::nullopt}, tokens->end());
 }
 
+template <class T>
+std::vector<T> listToVector(const std::list<T> list) {
+    std::vector<T> v {
+        std::make_move_iterator(std::begin(list)),
+        std::make_move_iterator(std::end(list))
+    };
+    return v;
+}
+
 std::pair<Form, std::list<Token>::const_iterator> readForm(const std::list<Token> *tokens, std::list<Token>::const_iterator it) {
     auto token = *it;
     switch (token.type) {
@@ -149,7 +158,11 @@ std::pair<Form, std::list<Token>::const_iterator> readForm(const std::list<Token
                     case '(':
                         return readList(tokens, ++it, ')');
                     case '[':
-                        return readList(tokens, ++it, ']');
+                        {
+                            auto ret = readList(tokens, ++it, ']');
+                            auto list = std::get<std::list<FormWrapper> >(ret.first);
+                            return std::make_pair(listToVector<FormWrapper>(list), ret.second);
+                        }
                     case '{':
                         return readList(tokens, ++it, '}');
                     case ')':
