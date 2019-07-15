@@ -21,15 +21,15 @@ const std::regex TYPE(
     "([^\\s\\[\\]{}(\'\"`,;)]*)" // Symbol
 );
 
-using Primitive = std::variant<bool, char, long, double, std::string>;
+using Value = std::variant<bool, char, long, double, std::string>;
 
 struct Token {
-    Primitive value;
+    Value value;
     Type type;
     int line;
     int column;
 
-    Token(Primitive v, Type t, int l, int c) : value(v), type(t), line(l), column(c) {}
+    Token(Value v, Type t, int l, int c) : value(v), type(t), line(l), column(c) {}
 };
 
 struct FormWrapper;
@@ -48,7 +48,7 @@ struct FormWrapper {
      FormWrapper(Form f) : form(f) {}
 };
 
-Primitive parse(std::string value, Type type) {
+Value parse(std::string value, Type type) {
     switch (type) {
         case SpecialChar:
             return value[0];
@@ -82,7 +82,7 @@ std::list<Form> tokenize(std::string input) {
            if (!match[i].str().empty()) {
                std::string valueStr = match.str();
                Type type = static_cast<Type>(i-1);
-               Primitive value = parse(valueStr, type);
+               Value value = parse(valueStr, type);
                int column = match.position() + 1;
                tokens.push_back(std::make_shared<Token>(Token{value, type, line, column}));
                line += std::count(valueStr.begin(), valueStr.end(), '\n');
