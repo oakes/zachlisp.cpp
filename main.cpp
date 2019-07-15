@@ -8,12 +8,12 @@
 #include <regex>
 
 enum Type {
-    Whitespace, SpliceUnquote, SpecialChar, String, Comment, Number, Symbol
+    Whitespace, SpecialChars, SpecialChar, String, Comment, Number, Symbol
 };
 
 const std::regex TYPE(
     "([\\s,]*)|" // Whitespace
-    "(~@)|" // SpliceUnquote
+    "(~@|#\\{)|" // SpecialChars
     "([\\[\\]{}()\'`~^@])|" // SpecialChar
     "(\"(?:\\\\.|[^\\\\\"])*\"?)|" // String
     "(;.*)|" // Comment
