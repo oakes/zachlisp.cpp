@@ -63,6 +63,7 @@ std::map<std::variant<char, std::string>, std::string> EXPANDED_NAMES = {
     {'\'', "quote"},
     {'`', "quasiquote"},
     {'~', "unquote"},
+    {'@', "deref"},
     {"~@", "splice-unquote"}
 };
 
@@ -217,6 +218,7 @@ std::optional<std::pair<Form, std::list<Token>::const_iterator> > readForm(const
                     case '\'':
                     case '`':
                     case '~':
+                    case '@':
                         return expandQuotedForm(tokens, ++it, Token{EXPANDED_NAMES[c], Symbol, token.line, token.column});
                 }
                 break;
