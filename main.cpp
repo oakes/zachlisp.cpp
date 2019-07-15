@@ -2,6 +2,8 @@
 #include <string>
 #include <list>
 #include <vector>
+#include <map>
+#include <set>
 #include <variant>
 #include <regex>
 
@@ -30,28 +32,20 @@ struct Token {
     Token(Primitive v, Type t, int l, int c) : value(v), type(t), line(l), column(c) {}
 };
 
-struct DataWrapper;
+struct FormWrapper;
 
-using DataList = std::list<DataWrapper>;
-using DataVector = std::vector<DataWrapper>;
-using Data = std::variant<std::shared_ptr<Token>, DataList, DataVector>;
+using Form = std::variant<
+    std::shared_ptr<Token>,
+    std::list<FormWrapper>,
+    std::vector<FormWrapper>,
+    std::map<FormWrapper, FormWrapper>,
+    std::set<FormWrapper>
+>;
 
-struct DataWrapper {
-    Data _data;
+struct FormWrapper {
+     Form form;
 
-    template <typename... Ts, typename = 
-        std::enable_if_t // https://vittorioromeo.info/index/blog/variants_lambdas_part_2.html#libcpp_constraint
-        <
-            !std::disjunction_v
-            <
-                std::is_same<std::decay_t<Ts>, DataWrapper>...
-            >
-        >
-    >
-    DataWrapper(Ts&&... xs)
-        : _data{std::forward<Ts>(xs)...}
-    {
-    }
+     FormWrapper(Form f) : form(f) {}
 };
 
 Primitive parse(std::string value, Type type) {
@@ -74,11 +68,11 @@ Primitive parse(std::string value, Type type) {
     return value;
 }
 
-std::vector<Data> tokenize(std::string input) {
+std::vector<Form> tokenize(std::string input) {
     std::sregex_iterator begin(input.begin(), input.end(), TYPE);
     std::sregex_iterator end;
 
-    std::vector<Data> tokens;
+    std::vector<Form> tokens;
 
     int line = 1;
 
