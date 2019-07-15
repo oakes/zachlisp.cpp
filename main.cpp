@@ -49,8 +49,7 @@ using Form = std::variant<
     Token,
     std::list<FormWrapper>,
     std::vector<FormWrapper>,
-    std::map<FormWrapper, FormWrapper>,
-    std::set<FormWrapper>
+    std::map<std::string, FormWrapper>
 >;
 
 struct FormWrapper {
@@ -128,14 +127,33 @@ std::list<Token> tokenize(std::string input) {
 }
 
 std::optional<std::pair<Form, std::list<Token>::const_iterator> > readForm(const std::list<Token> *tokens, std::list<Token>::const_iterator it);
+std::string prStr(Form form);
 
-template <class T>
-std::vector<T> listToVector(const std::list<T> list) {
-    std::vector<T> v {
+Form listToVector(const std::list<FormWrapper> list) {
+    std::vector<FormWrapper> v {
         std::make_move_iterator(std::begin(list)),
         std::make_move_iterator(std::end(list))
     };
     return v;
+}
+
+Form listToMap(const std::list<FormWrapper> list) {
+    std::map<std::string, FormWrapper> m;
+    std::map<std::string, FormWrapper>::const_iterator mapIt = m.begin();
+    std::list<FormWrapper>::const_iterator listIt = list.begin();
+    while (listIt != list.end()) {
+        auto key = *listIt;
+        ++listIt;
+        if (listIt == list.end()) {
+            return ReaderError{"Map must contain even number of forms", std::nullopt};
+        } else {
+            auto val = *listIt;
+            ++listIt;
+            m.insert(mapIt, std::pair(prStr(key.form), val));
+            ++mapIt;
+        }
+    }
+    return m;
 }
 
 std::pair<Form, std::list<Token>::const_iterator> readColl(const std::list<Token> *tokens, std::list<Token>::const_iterator it, FormName formName) {
@@ -148,7 +166,9 @@ std::pair<Form, std::list<Token>::const_iterator> readColl(const std::list<Token
             if (c == endDelimiter) {
                 switch (formName) {
                     case VectorForm:
-                        return std::make_pair(listToVector<FormWrapper>(forms), ++it);
+                        return std::make_pair(listToVector(forms), ++it);
+                    case MapForm:
+                        return std::make_pair(listToMap(forms), ++it);
                     default:
                         return std::make_pair(forms, ++it);
                 }
@@ -277,16 +297,29 @@ std::string prStr(Token token) {
     return "";
 }
 
-std::string prStr(Form form);
+std::string prStr(FormWrapper formWrapper) {
+    return prStr(formWrapper.form);
+}
 
-template <template <class> class T>
-std::string prStr(T<FormWrapper> list) {
+template <class T>
+std::string prStr(T list) {
     std::string s;
     for (auto item : list) {
         if (s.size() > 0) {
             s += " ";
         }
-        s += prStr(item.form);
+        s += prStr(item);
+    }
+    return s;
+}
+
+std::string prStr(std::map<std::string, FormWrapper> map) {
+    std::string s;
+    for (auto item : map) {
+        if (s.size() > 0) {
+            s += " ";
+        }
+        s += item.first + " " + prStr(item.second.form);
     }
     return s;
 }
@@ -301,13 +334,13 @@ std::string prStr(Form form) {
         case TokenForm:
             return prStr(std::get<Token>(form));
         case ListForm:
-            return "(" + prStr<std::list>(std::get<std::list<FormWrapper> >(form)) + ")";
+            return "(" + prStr<std::list<FormWrapper> >(std::get<std::list<FormWrapper> >(form)) + ")";
         case VectorForm:
-            return "[" + prStr<std::vector>(std::get<std::vector<FormWrapper> >(form)) + "]";
+            return "[" + prStr<std::vector<FormWrapper> >(std::get<std::vector<FormWrapper> >(form)) + "]";
         case MapForm:
-            return "{" + prStr<std::list>(std::get<std::list<FormWrapper> >(form)) + "}";
+            return "{" + prStr(std::get<std::map<std::string, FormWrapper> >(form)) + "}";
         case SetForm:
-            return "#{" + prStr<std::list>(std::get<std::list<FormWrapper> >(form)) + "}";
+            return "#{" + prStr<std::list<FormWrapper> >(std::get<std::list<FormWrapper> >(form)) + "}";
     }
     return "";
 }
