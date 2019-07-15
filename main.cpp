@@ -202,6 +202,8 @@ std::optional<std::pair<Form, std::list<Token>::const_iterator> > readForm(const
                 }
                 break;
             }
+        case Comment:
+            return std::nullopt;
     }
     return std::make_pair(token, ++it);
 }
