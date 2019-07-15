@@ -35,7 +35,7 @@ struct Token {
 struct FormWrapper;
 
 using Form = std::variant<
-    std::shared_ptr<Token>,
+    Token,
     std::list<FormWrapper>,
     std::vector<FormWrapper>,
     std::map<FormWrapper, FormWrapper>,
@@ -84,7 +84,7 @@ std::list<Form> tokenize(std::string input) {
                Type type = static_cast<Type>(i-1);
                Value value = parse(valueStr, type);
                int column = match.position() + 1;
-               tokens.push_back(std::make_shared<Token>(Token{value, type, line, column}));
+               tokens.push_back(Token{value, type, line, column});
                line += std::count(valueStr.begin(), valueStr.end(), '\n');
                break;
            }
@@ -97,8 +97,8 @@ std::list<Form> tokenize(std::string input) {
 std::list<Form> organize(std::list<Form> forms) {
     auto end = forms.end();
     for (auto it = forms.begin(); it != end; ++it) {
-        auto token = std::get<std::shared_ptr<Token> >(*it);
-        switch (token->type) {
+        auto token = std::get<Token>(*it);
+        switch (token.type) {
             case Whitespace:
                 forms.erase(it);
                 --it;
