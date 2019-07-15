@@ -21,6 +21,7 @@ const std::regex TYPE(
     "([^\\s\\[\\]{}(\'\"`,;)]*)" // Symbol
 );
 
+enum ValueName {BoolValue, CharValue, LongValue, DoubleValue, StringValue};
 using Value = std::variant<bool, char, long, double, std::string>;
 
 struct Token {
@@ -102,7 +103,7 @@ std::list<Token> tokenize(std::string input) {
     return tokens;
 }
 
-std::pair<Form, std::list<Token>::const_iterator> readForm(const std::list<Token> *tokens, std::list<Token>::const_iterator it);
+std::optional<std::pair<Form, std::list<Token>::const_iterator> > readForm(const std::list<Token> *tokens, std::list<Token>::const_iterator it);
 
 std::pair<Form, std::list<Token>::const_iterator> readList(const std::list<Token> *tokens, std::list<Token>::const_iterator it, char endDelimiter) {
     std::list<FormWrapper> forms;
@@ -117,32 +118,29 @@ std::pair<Form, std::list<Token>::const_iterator> readList(const std::list<Token
                     case ')':
                     case ']':
                     case '}':
-                        return std::make_pair(ReaderError{"Unmatched delimiter: " + c, token}, tokens->end());
+                        return std::make_pair(ReaderError{"Unmatched delimiter: " + std::string(1, c), token}, tokens->end());
                 }
             }
         }
-        auto ret = readForm(tokens, it);
-        auto form = ret.first;
-        it = ret.second;
-        forms.push_back(FormWrapper{form});
+        if (auto retOpt = readForm(tokens, it)) {
+            auto ret = retOpt.value();
+            forms.push_back(FormWrapper{ret.first});
+            it = ret.second;
+        } else {
+            ++it;
+        }
     }
-    return std::make_pair(ReaderError{"No end delimiter found: " + endDelimiter, std::nullopt}, tokens->end());
+    return std::make_pair(ReaderError{"EOF: no " + std::string(1, endDelimiter) + " found", std::nullopt}, tokens->end());
 }
 
-template <class T>
-std::vector<T> listToVector(const std::list<T> list) {
-    std::vector<T> v {
-        std::make_move_iterator(std::begin(list)),
-        std::make_move_iterator(std::end(list))
-    };
-    return v;
-}
-
-std::pair<Form, std::list<Token>::const_iterator> readForm(const std::list<Token> *tokens, std::list<Token>::const_iterator it) {
+std::optional<std::pair<Form, std::list<Token>::const_iterator> > readForm(const std::list<Token> *tokens, std::list<Token>::const_iterator it) {
+    if (it == tokens->end()) {
+        return std::nullopt;
+    }
     auto token = *it;
     switch (token.type) {
         case Whitespace:
-            return readForm(tokens, ++it);
+            return std::nullopt;
         case SpecialChars:
             {
                 std::string s = std::get<std::string>(token.value);
@@ -158,17 +156,23 @@ std::pair<Form, std::list<Token>::const_iterator> readForm(const std::list<Token
                     case '(':
                         return readList(tokens, ++it, ')');
                     case '[':
-                        {
-                            auto ret = readList(tokens, ++it, ']');
-                            auto list = std::get<std::list<FormWrapper> >(ret.first);
-                            return std::make_pair(listToVector<FormWrapper>(list), ret.second);
-                        }
+                        return readList(tokens, ++it, ']');
                     case '{':
                         return readList(tokens, ++it, '}');
                     case ')':
                     case ']':
                     case '}':
-                        return std::make_pair(ReaderError{"Unmatched delimiter: " + c, token}, tokens->end());
+                        return std::make_pair(ReaderError{"Unmatched delimiter: " + std::string(1, c), token}, tokens->end());
+                }
+                break;
+            }
+        case String:
+            {
+                std::string s = std::get<std::string>(token.value);
+                if (s.size() < 2 || s.back() != '"') {
+                    return std::make_pair(ReaderError{"EOF: unbalanced quote", token}, tokens->end());
+                } else {
+                    token.value = s.substr(1, s.size() - 2);
                 }
                 break;
             }
@@ -180,25 +184,91 @@ std::list<Form> readForms(const std::list<Token> *tokens) {
     std::list<Form> forms;
     std::list<Token>::const_iterator it = tokens->begin();
     while (it != tokens->end()) {
-        auto ret = readForm(tokens, it);
-        forms.push_back(ret.first);
-        it = ret.second;
+        if (auto retOpt = readForm(tokens, it)) {
+            auto ret = retOpt.value();
+            forms.push_back(ret.first);
+            it = ret.second;
+        } else {
+            ++it;
+        }
     }
     return forms;
 }
 
-std::string READ(const std::string input) {
+std::string prStr(Token token) {
+    switch (token.value.index()) {
+        case BoolValue:
+            return std::get<bool>(token.value) ? "true" : "false";
+        case CharValue:
+            return std::string(1, std::get<char>(token.value));
+        case LongValue:
+            return std::to_string(std::get<long>(token.value));
+        case DoubleValue:
+            return std::to_string(std::get<double>(token.value));
+        case StringValue:
+            {
+                std::string s = std::get<std::string>(token.value);
+                if (token.type == String) {
+                    return "\"" + s + "\"";
+                } else {
+                    return s;
+                }
+            }
+    }
+    return "";
+}
+
+std::string prStr(Form form);
+
+template <template <class> class T>
+std::string prStr(T<FormWrapper> list) {
+    std::string s;
+    for (auto item : list) {
+        if (s.size() > 0) {
+            s += " ";
+        }
+        s += prStr(item.form);
+    }
+    return s;
+}
+
+std::string prStr(Form form) {
+    switch (form.index()) {
+        case 0: // ReaderError
+            {
+                auto error = std::get<ReaderError>(form);
+                return "#ReaderError \"" + error.message + "\"";
+            }
+        case 1: // Token
+            return prStr(std::get<Token>(form));
+        case 2: // list
+            return "(" + prStr<std::list>(std::get<std::list<FormWrapper> >(form)) + ")";
+        case 3: // vector
+            return "[" + prStr<std::vector>(std::get<std::vector<FormWrapper> >(form)) + "]";
+        case 4: // map
+            return "{" + prStr<std::list>(std::get<std::list<FormWrapper> >(form)) + "}";
+        case 5: // set
+            return "#{" + prStr<std::list>(std::get<std::list<FormWrapper> >(form)) + "}";
+    }
+    return "";
+}
+
+std::list<Form> READ(const std::string input) {
     auto tokens = tokenize(input);
     auto forms = readForms(&tokens);
-    return input;
+    return forms;
 }
 
-std::string EVAL(const std::string input) {
-    return input;
+std::list<Form> EVAL(const std::list<Form> forms) {
+    return forms;
 }
 
-std::string PRINT(const std::string input) {
-    return input;
+std::string PRINT(const std::list<Form> forms) {
+    std::string s;
+    for (auto form : forms) {
+        s += prStr(form) + "\n";
+    }
+    return s;
 }
 
 std::string rep(const std::string input) {
@@ -210,7 +280,7 @@ int main(int argc, char* argv[]) {
     do {
         std::cout << "user> ";
         std::getline(std::cin, input);
-        std::cout << rep(input) << std::endl;
+        std::cout << rep(input);
     } while (!std::cin.fail());
     return 0;
 }
