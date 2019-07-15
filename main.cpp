@@ -21,13 +21,6 @@ const std::regex TYPE(
     "([^\\s\\[\\]{}(\'\"`,;)]*)" // Symbol
 );
 
-std::map<std::variant<char, std::string>, std::string> EXPANDED_NAMES = {
-    {'\'', "quote"},
-    {'`', "quasiquote"},
-    {'~', "unquote"},
-    {"~@", "splice-unquote"}
-};
-
 enum ValueName {BoolValue, CharValue, LongValue, DoubleValue, StringValue};
 using Value = std::variant<bool, char, long, double, std::string>;
 
@@ -49,6 +42,8 @@ struct ReaderError {
 
 struct FormWrapper;
 
+enum FormName {ReaderErrorForm, TokenForm, ListForm, VectorForm, MapForm, SetForm};
+
 using Form = std::variant<
     ReaderError,
     Token,
@@ -62,6 +57,27 @@ struct FormWrapper {
      Form form;
 
      FormWrapper(Form f) : form(f) {}
+};
+
+std::map<std::variant<char, std::string>, std::string> EXPANDED_NAMES = {
+    {'\'', "quote"},
+    {'`', "quasiquote"},
+    {'~', "unquote"},
+    {"~@", "splice-unquote"}
+};
+
+std::map<std::variant<char, std::string>, FormName> COLL_NAMES = {
+    {'(', ListForm},
+    {'[', VectorForm},
+    {'{', MapForm},
+    {"#{", SetForm},
+};
+
+std::map<FormName, char> END_DELIMITERS = {
+    {ListForm, ')'},
+    {VectorForm, ']'},
+    {MapForm, '}'},
+    {SetForm, '}'}
 };
 
 Value parse(std::string value, Type type) {
@@ -112,14 +128,29 @@ std::list<Token> tokenize(std::string input) {
 
 std::optional<std::pair<Form, std::list<Token>::const_iterator> > readForm(const std::list<Token> *tokens, std::list<Token>::const_iterator it);
 
-std::pair<Form, std::list<Token>::const_iterator> readList(const std::list<Token> *tokens, std::list<Token>::const_iterator it, char endDelimiter) {
+template <class T>
+std::vector<T> listToVector(const std::list<T> list) {
+    std::vector<T> v {
+        std::make_move_iterator(std::begin(list)),
+        std::make_move_iterator(std::end(list))
+    };
+    return v;
+}
+
+std::pair<Form, std::list<Token>::const_iterator> readColl(const std::list<Token> *tokens, std::list<Token>::const_iterator it, FormName formName) {
+    char endDelimiter = END_DELIMITERS[formName];
     std::list<FormWrapper> forms;
     while (it != tokens->end()) {
         auto token = *it;
         if (token.type == SpecialChar) {
             char c = std::get<char>(token.value);
             if (c == endDelimiter) {
-                return std::make_pair(forms, ++it);
+                switch (formName) {
+                    case VectorForm:
+                        return std::make_pair(listToVector<FormWrapper>(forms), ++it);
+                    default:
+                        return std::make_pair(forms, ++it);
+                }
             } else {
                 switch (c) {
                     case ')':
@@ -165,7 +196,7 @@ std::optional<std::pair<Form, std::list<Token>::const_iterator> > readForm(const
             {
                 std::string s = std::get<std::string>(token.value);
                 if (s == "#{") {
-                    return readList(tokens, ++it, '}');
+                    return readColl(tokens, ++it, COLL_NAMES[s]);
                 } else if (s == "~@") {
                     return expandQuotedForm(tokens, ++it, Token{EXPANDED_NAMES[s], Symbol, token.line, token.column});
                 }
@@ -176,11 +207,9 @@ std::optional<std::pair<Form, std::list<Token>::const_iterator> > readForm(const
                 char c = std::get<char>(token.value);
                 switch (c) {
                     case '(':
-                        return readList(tokens, ++it, ')');
                     case '[':
-                        return readList(tokens, ++it, ']');
                     case '{':
-                        return readList(tokens, ++it, '}');
+                        return readColl(tokens, ++it, COLL_NAMES[c]);
                     case ')':
                     case ']':
                     case '}':
@@ -262,20 +291,20 @@ std::string prStr(T<FormWrapper> list) {
 
 std::string prStr(Form form) {
     switch (form.index()) {
-        case 0: // ReaderError
+        case ReaderErrorForm:
             {
                 auto error = std::get<ReaderError>(form);
                 return "#ReaderError \"" + error.message + "\"";
             }
-        case 1: // Token
+        case TokenForm:
             return prStr(std::get<Token>(form));
-        case 2: // list
+        case ListForm:
             return "(" + prStr<std::list>(std::get<std::list<FormWrapper> >(form)) + ")";
-        case 3: // vector
+        case VectorForm:
             return "[" + prStr<std::vector>(std::get<std::vector<FormWrapper> >(form)) + "]";
-        case 4: // map
+        case MapForm:
             return "{" + prStr<std::list>(std::get<std::list<FormWrapper> >(form)) + "}";
-        case 5: // set
+        case SetForm:
             return "#{" + prStr<std::list>(std::get<std::list<FormWrapper> >(form)) + "}";
     }
     return "";
