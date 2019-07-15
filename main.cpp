@@ -3,7 +3,7 @@
 #include <list>
 #include <vector>
 #include <map>
-#include <set>
+#include <unordered_set>
 #include <variant>
 #include <regex>
 
@@ -49,7 +49,8 @@ using Form = std::variant<
     Token,
     std::list<FormWrapper>,
     std::vector<FormWrapper>,
-    std::map<std::string, FormWrapper>
+    std::map<std::string, FormWrapper>,
+    std::unordered_set<std::string>
 >;
 
 struct FormWrapper {
@@ -156,6 +157,15 @@ Form listToMap(const std::list<FormWrapper> list) {
     return m;
 }
 
+Form listToSet(const std::list<FormWrapper> list) {
+    std::unordered_set<std::string> s;
+    std::unordered_set<std::string>::const_iterator it = s.begin();
+    for (auto item : list) {
+        s.insert(it, prStr(item.form));
+    }
+    return s;
+}
+
 std::pair<Form, std::list<Token>::const_iterator> readColl(const std::list<Token> *tokens, std::list<Token>::const_iterator it, FormName formName) {
     char endDelimiter = END_DELIMITERS[formName];
     std::list<FormWrapper> forms;
@@ -169,6 +179,8 @@ std::pair<Form, std::list<Token>::const_iterator> readColl(const std::list<Token
                         return std::make_pair(listToVector(forms), ++it);
                     case MapForm:
                         return std::make_pair(listToMap(forms), ++it);
+                    case SetForm:
+                        return std::make_pair(listToSet(forms), ++it);
                     default:
                         return std::make_pair(forms, ++it);
                 }
@@ -301,6 +313,10 @@ std::string prStr(FormWrapper formWrapper) {
     return prStr(formWrapper.form);
 }
 
+std::string prStr(std::string s) {
+    return s;
+}
+
 template <class T>
 std::string prStr(T list) {
     std::string s;
@@ -340,7 +356,7 @@ std::string prStr(Form form) {
         case MapForm:
             return "{" + prStr(std::get<std::map<std::string, FormWrapper> >(form)) + "}";
         case SetForm:
-            return "#{" + prStr<std::list<FormWrapper> >(std::get<std::list<FormWrapper> >(form)) + "}";
+            return "#{" + prStr<std::unordered_set<std::string> >(std::get<std::unordered_set<std::string> >(form)) + "}";
     }
     return "";
 }
