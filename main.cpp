@@ -68,15 +68,15 @@ Primitive parse(std::string value, Type type) {
     return value;
 }
 
-std::vector<Form> tokenize(std::string input) {
+std::list<Form> tokenize(std::string input) {
     std::sregex_iterator begin(input.begin(), input.end(), TYPE);
     std::sregex_iterator end;
 
-    std::vector<Form> tokens;
+    std::list<Form> tokens;
 
     int line = 1;
 
-    for (std::sregex_iterator it = begin; it != end; ++it) {
+    for (auto it = begin; it != end; ++it) {
         std::smatch match = *it;
         for(auto i = 1; i < match.size(); ++i){
            if (!match[i].str().empty()) {
@@ -94,7 +94,21 @@ std::vector<Form> tokenize(std::string input) {
     return tokens;
 }
 
+std::list<Form> organize(std::list<Form> forms) {
+    auto end = forms.end();
+    for (auto it = forms.begin(); it != end; ++it) {
+        auto token = std::get<std::shared_ptr<Token> >(*it);
+        switch (token->type) {
+            case Whitespace:
+                forms.erase(it);
+                --it;
+        }
+    }
+    return forms;
+}
+
 std::string READ(const std::string input) {
+    auto tokens = organize(tokenize(input));
     return input;
 }
 
