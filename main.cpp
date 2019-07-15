@@ -21,6 +21,13 @@ const std::regex TYPE(
     "([^\\s\\[\\]{}(\'\"`,;)]*)" // Symbol
 );
 
+std::map<std::variant<char, std::string>, std::string> EXPANDED_NAMES = {
+    {'\'', "quote"},
+    {'`', "quasiquote"},
+    {'~', "unquote"},
+    {"~@", "splice-unquote"}
+};
+
 enum ValueName {BoolValue, CharValue, LongValue, DoubleValue, StringValue};
 using Value = std::variant<bool, char, long, double, std::string>;
 
@@ -133,6 +140,19 @@ std::pair<Form, std::list<Token>::const_iterator> readList(const std::list<Token
     return std::make_pair(ReaderError{"EOF: no " + std::string(1, endDelimiter) + " found", std::nullopt}, tokens->end());
 }
 
+std::pair<Form, std::list<Token>::const_iterator> expandQuotedForm(const std::list<Token> *tokens, std::list<Token>::const_iterator it, Token token) {
+    if (auto retOpt = readForm(tokens, it)) {
+        auto ret = retOpt.value();
+        std::list<FormWrapper> list {
+            FormWrapper{token},
+            ret.first
+        };
+        return std::make_pair(list, ret.second);
+    } else {
+        return std::make_pair(ReaderError{"EOF: Nothing found after quote", token}, tokens->end());
+    }
+}
+
 std::optional<std::pair<Form, std::list<Token>::const_iterator> > readForm(const std::list<Token> *tokens, std::list<Token>::const_iterator it) {
     if (it == tokens->end()) {
         return std::nullopt;
@@ -146,6 +166,8 @@ std::optional<std::pair<Form, std::list<Token>::const_iterator> > readForm(const
                 std::string s = std::get<std::string>(token.value);
                 if (s == "#{") {
                     return readList(tokens, ++it, '}');
+                } else if (s == "~@") {
+                    return expandQuotedForm(tokens, ++it, Token{EXPANDED_NAMES[s], Symbol, token.line, token.column});
                 }
                 break;
             }
@@ -163,6 +185,10 @@ std::optional<std::pair<Form, std::list<Token>::const_iterator> > readForm(const
                     case ']':
                     case '}':
                         return std::make_pair(ReaderError{"Unmatched delimiter: " + std::string(1, c), token}, tokens->end());
+                    case '\'':
+                    case '`':
+                    case '~':
+                        return expandQuotedForm(tokens, ++it, Token{EXPANDED_NAMES[c], Symbol, token.line, token.column});
                 }
                 break;
             }
