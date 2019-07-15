@@ -1,13 +1,40 @@
 #include <iostream>
 #include <string>
+#include <list>
 #include <vector>
 #include <variant>
 #include <regex>
 
+enum Type {
+    Whitespace, SpliceUnquote, SpecialChar, String, Comment, Number, Symbol
+};
+
+const std::regex TYPE(
+    "([\\s,]*)|" // Whitespace
+    "(~@)|" // SpliceUnquote
+    "([\\[\\]{}()\'`~^@])|" // SpecialChar
+    "(\"(?:\\\\.|[^\\\\\"])*\"?)|" // String
+    "(;.*)|" // Comment
+    "(\\d+\\.?\\d*)|" // Number
+    "([^\\s\\[\\]{}(\'\"`,;)]*)" // Symbol
+);
+
+using Primitive = std::variant<bool, char, long, double, std::string>;
+
+struct Token {
+    Primitive value;
+    Type type;
+    int line;
+    int column;
+
+    Token(Primitive v, Type t, int l, int c) : value(v), type(t), line(l), column(c) {}
+};
+
 struct DataWrapper;
 
+using DataList = std::list<DataWrapper>;
 using DataVector = std::vector<DataWrapper>;
-using Data = std::variant<long, double, std::string, DataVector>;
+using Data = std::variant<std::shared_ptr<Token>, DataList, DataVector>;
 
 struct DataWrapper {
     Data _data;
@@ -27,31 +54,31 @@ struct DataWrapper {
     }
 };
 
-enum Type {Whitespace, SpliceUnquote, SpecialChar, String, Comment, Symbol};
+Primitive parse(std::string value, Type type) {
+    switch (type) {
+        case SpecialChar:
+            return value[0];
+        case Number:
+            if (value.find('.') == std::string::npos) {
+                return std::stol(value);
+            } else {
+                return std::stod(value);
+            }
+        case Symbol:
+            if (value == "true") {
+                return true;
+            } else if (value == "false") {
+                return false;
+            }
+    }
+    return value;
+}
 
-const std::regex TYPE(
-    "([\\s,]*)|" // Whitespace
-    "(~@)|" // SpliceUnquote
-    "([\\[\\]{}()\'`~^@])|" // SpecialChar
-    "(\"(?:\\\\.|[^\\\\\"])*\"?)|" // String
-    "(;.*)|" // Comment
-    "([^\\s\\[\\]{}(\'\"`,;)]*)" // Symbol
-);
-
-struct Token {
-    std::string value;
-    Type type;
-    int line;
-    int column;
-
-    Token(std::string v, Type t, int l, int c) : value(v), type(t), line(l), column(c) {}
-};
-
-std::vector<std::shared_ptr<Token> > tokenize(std::string input) {
+std::vector<Data> tokenize(std::string input) {
     std::sregex_iterator begin(input.begin(), input.end(), TYPE);
     std::sregex_iterator end;
 
-    std::vector<std::shared_ptr<Token> > tokens;
+    std::vector<Data> tokens;
 
     int line = 1;
 
@@ -59,11 +86,12 @@ std::vector<std::shared_ptr<Token> > tokenize(std::string input) {
         std::smatch match = *it;
         for(auto i = 1; i < match.size(); ++i){
            if (!match[i].str().empty()) {
-               std::string value = match.str();
+               std::string valueStr = match.str();
                Type type = static_cast<Type>(i-1);
+               Primitive value = parse(valueStr, type);
                int column = match.position() + 1;
                tokens.push_back(std::make_shared<Token>(Token{value, type, line, column}));
-               line += std::count(value.begin(), value.end(), '\n');
+               line += std::count(valueStr.begin(), valueStr.end(), '\n');
                break;
            }
         }
