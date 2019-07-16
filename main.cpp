@@ -64,6 +64,7 @@ std::map<std::variant<char, std::string>, std::string> EXPANDED_NAMES = {
     {'`', "quasiquote"},
     {'~', "unquote"},
     {'@', "deref"},
+    {'^', "with-meta"},
     {"~@", "splice-unquote"}
 };
 
@@ -127,7 +128,9 @@ std::list<Token> tokenize(std::string input) {
     return tokens;
 }
 
-std::optional<std::pair<Form, std::list<Token>::const_iterator> > readForm(const std::list<Token> *tokens, std::list<Token>::const_iterator it);
+std::pair<Form, std::list<Token>::const_iterator> readForm(const std::list<Token> *tokens, std::list<Token>::const_iterator it);
+std::optional<std::pair<Form, std::list<Token>::const_iterator> > readUsefulForm(const std::list<Token> *tokens, std::list<Token>::const_iterator it);
+std::optional<std::pair<Token, std::list<Token>::const_iterator> > readUsefulToken(const std::list<Token> *tokens, std::list<Token>::const_iterator it);
 std::string prStr(Form form);
 
 Form listToVector(const std::list<FormWrapper> list) {
@@ -169,8 +172,10 @@ Form listToSet(const std::list<FormWrapper> list) {
 std::pair<Form, std::list<Token>::const_iterator> readColl(const std::list<Token> *tokens, std::list<Token>::const_iterator it, FormName formName) {
     char endDelimiter = END_DELIMITERS[formName];
     std::list<FormWrapper> forms;
-    while (it != tokens->end()) {
-        auto token = *it;
+    while (auto retOpt = readUsefulToken(tokens, it)) {
+        auto ret = retOpt.value();
+        auto token = ret.first;
+        it = ret.second;
         if (token.type == SpecialChar) {
             char c = std::get<char>(token.value);
             if (c == endDelimiter) {
@@ -193,19 +198,15 @@ std::pair<Form, std::list<Token>::const_iterator> readColl(const std::list<Token
                 }
             }
         }
-        if (auto retOpt = readForm(tokens, it)) {
-            auto ret = retOpt.value();
-            forms.push_back(FormWrapper{ret.first});
-            it = ret.second;
-        } else {
-            ++it;
-        }
+        auto ret2 = readForm(tokens, it);
+        forms.push_back(FormWrapper{ret2.first});
+        it = ret2.second;
     }
     return std::make_pair(ReaderError{"EOF: no " + std::string(1, endDelimiter) + " found", std::nullopt}, tokens->end());
 }
 
 std::pair<Form, std::list<Token>::const_iterator> expandQuotedForm(const std::list<Token> *tokens, std::list<Token>::const_iterator it, Token token) {
-    if (auto retOpt = readForm(tokens, it)) {
+    if (auto retOpt = readUsefulForm(tokens, it)) {
         auto ret = retOpt.value();
         std::list<FormWrapper> list {
             FormWrapper{token},
@@ -217,14 +218,30 @@ std::pair<Form, std::list<Token>::const_iterator> expandQuotedForm(const std::li
     }
 }
 
-std::optional<std::pair<Form, std::list<Token>::const_iterator> > readForm(const std::list<Token> *tokens, std::list<Token>::const_iterator it) {
-    if (it == tokens->end()) {
-        return std::nullopt;
+std::pair<Form, std::list<Token>::const_iterator> expandMetaQuotedForm(const std::list<Token> *tokens, std::list<Token>::const_iterator it, Token token) {
+    if (auto retOpt = readUsefulForm(tokens, it)) {
+        auto ret = retOpt.value();
+        if (auto ret2Opt = readUsefulForm(tokens, ret.second)) {
+            auto ret2 = ret2Opt.value();
+            std::list<FormWrapper> list {
+                FormWrapper{token},
+                ret2.first,
+                ret.first
+            };
+            return std::make_pair(list, ret2.second);
+        } else {
+            return std::make_pair(ReaderError{"EOF: Nothing found after metadata", token}, tokens->end());
+        }
+    } else {
+        return std::make_pair(ReaderError{"EOF: Nothing found after ^", token}, tokens->end());
     }
+}
+
+std::pair<Form, std::list<Token>::const_iterator> readForm(const std::list<Token> *tokens, std::list<Token>::const_iterator it) {
     auto token = *it;
     switch (token.type) {
         case Whitespace:
-            return std::nullopt;
+            break;
         case SpecialChars:
             {
                 std::string s = std::get<std::string>(token.value);
@@ -252,6 +269,8 @@ std::optional<std::pair<Form, std::list<Token>::const_iterator> > readForm(const
                     case '~':
                     case '@':
                         return expandQuotedForm(tokens, ++it, Token{EXPANDED_NAMES[c], Symbol, token.line, token.column});
+                    case '^':
+                        return expandMetaQuotedForm(tokens, ++it, Token{EXPANDED_NAMES[c], Symbol, token.line, token.column});
                 }
                 break;
             }
@@ -266,22 +285,42 @@ std::optional<std::pair<Form, std::list<Token>::const_iterator> > readForm(const
                 break;
             }
         case Comment:
-            return std::nullopt;
+            break;
     }
     return std::make_pair(token, ++it);
+}
+
+std::optional<std::pair<Token, std::list<Token>::const_iterator> > readUsefulToken(const std::list<Token> *tokens, std::list<Token>::const_iterator it) {
+    while (it != tokens->end()) {
+        auto token = *it;
+        switch (token.type) {
+            case Whitespace:
+            case Comment:
+                ++it;
+                break;
+            default:
+                return std::make_pair(token, it);
+        }
+    }
+    return std::nullopt;
+}
+
+std::optional<std::pair<Form, std::list<Token>::const_iterator> > readUsefulForm(const std::list<Token> *tokens, std::list<Token>::const_iterator it) {
+    if (auto retOpt = readUsefulToken(tokens, it)) {
+        auto ret = retOpt.value();
+        return readForm(tokens, ret.second);
+    } else {
+        return std::nullopt;
+    }
 }
 
 std::list<Form> readForms(const std::list<Token> *tokens) {
     std::list<Form> forms;
     std::list<Token>::const_iterator it = tokens->begin();
-    while (it != tokens->end()) {
-        if (auto retOpt = readForm(tokens, it)) {
-            auto ret = retOpt.value();
-            forms.push_back(ret.first);
-            it = ret.second;
-        } else {
-            ++it;
-        }
+    while (auto retOpt = readUsefulForm(tokens, it)) {
+        auto ret = retOpt.value();
+        forms.push_back(ret.first);
+        it = ret.second;
     }
     return forms;
 }
