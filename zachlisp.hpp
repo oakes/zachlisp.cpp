@@ -48,6 +48,68 @@ namespace zachlisp {
         Token(value::Value v, type::Type t, int l, int c) : value(v), type(t), line(l), column(c) {}
     };
 
+    }
+
+    // zachlisp::form
+    namespace form {
+
+    struct ReaderError {
+        std::string message;
+        std::optional<token::Token> token;
+
+        ReaderError(std::string m, std::optional<token::Token> t) : message(m), token(t) {}
+    };
+
+    struct FormWrapper;
+    class FormWrapperHash;
+
+    using FormWrapperSet = std::unordered_set<FormWrapper, FormWrapperHash>;
+
+    using Form = std::variant<
+        ReaderError,
+        token::Token,
+        std::list<FormWrapper>,
+        std::vector<FormWrapper>,
+        std::map<std::string, FormWrapper>,
+        std::shared_ptr<FormWrapperSet>
+    >;
+
+    enum FormIndex {READER_ERROR, TOKEN, LIST, VECTOR, MAP, SET};
+
+    }
+
+/*
+inline void hash_combine(std::size_t& seed) { }
+
+template <typename T, typename... Rest>
+inline void hash_combine(std::size_t& seed, const T& v, Rest... rest) {
+    std::hash<T> hasher;
+    seed ^= hasher(v) + 0x9e3779b9 + (seed<<6) + (seed>>2);
+    hash_combine(seed, rest...);
+}
+*/
+
+std::string prStr(form::Form form);
+
+}
+
+namespace std {
+
+template <> struct hash<zachlisp::token::Token>
+{
+    size_t operator()(const zachlisp::token::Token & x) const
+    {
+        return std::hash<zachlisp::token::value::Value>()(x.value);
+    }
+};
+
+}
+
+namespace zachlisp {
+
+    // zachlisp::token
+    namespace token {
+
     value::Value parse(std::string value, type::Type type) {
         switch (type) {
             case type::SPECIAL_CHAR:
@@ -99,31 +161,43 @@ namespace zachlisp {
     // zachlisp::form
     namespace form {
 
-    struct ReaderError {
-        std::string message;
-        std::optional<token::Token> token;
-
-        ReaderError(std::string m, std::optional<token::Token> t) : message(m), token(t) {}
-    };
-
-    struct FormWrapper;
-
-    using Form = std::variant<
-        ReaderError,
-        token::Token,
-        std::list<FormWrapper>,
-        std::vector<FormWrapper>,
-        std::map<std::string, FormWrapper>,
-        std::unordered_set<std::string>
-    >;
-
-    enum FormIndex {READER_ERROR, TOKEN, LIST, VECTOR, MAP, SET};
+    std::size_t hash(const FormWrapper & fw);
 
     struct FormWrapper {
-         Form form;
+        Form form;
 
-         FormWrapper(Form f) : form(f) {}
+        FormWrapper(Form f) : form(f) {}
+
+        bool operator==(const FormWrapper & fw) const {
+            return hash(*this) == hash(fw);
+        }
     };
+
+    class FormWrapperHash {
+    public:
+        std::size_t operator()(const FormWrapper & fw) const {
+            return hash(fw);
+        }
+    };
+
+    std::size_t hash(const FormWrapper & fw) {
+        std::size_t ret = 0;
+        switch (fw.form.index()) {
+            case TOKEN:
+                {
+                    auto token = std::get<token::Token>(fw.form);
+                    return std::hash<token::Token>()(token);
+                }
+            case READER_ERROR:
+            case LIST:
+            case VECTOR:
+            case MAP:
+            case SET:
+                break;
+        }
+        // TODO: hash these properly
+        return std::hash<std::string>()(prStr(fw.form));
+    }
 
     }
 
@@ -153,7 +227,6 @@ std::map<form::FormIndex, char> END_DELIMITERS = {
 std::pair<form::Form, std::list<token::Token>::const_iterator> readForm(const std::list<token::Token> *tokens, std::list<token::Token>::const_iterator it);
 std::optional<std::pair<form::Form, std::list<token::Token>::const_iterator> > readUsefulForm(const std::list<token::Token> *tokens, std::list<token::Token>::const_iterator it);
 std::optional<std::pair<token::Token, std::list<token::Token>::const_iterator> > readUsefulToken(const std::list<token::Token> *tokens, std::list<token::Token>::const_iterator it);
-std::string prStr(form::Form form);
 
 form::Form listToVector(const std::list<form::FormWrapper> list) {
     std::vector<form::FormWrapper> v {
@@ -183,10 +256,10 @@ form::Form listToMap(const std::list<form::FormWrapper> list) {
 }
 
 form::Form listToSet(const std::list<form::FormWrapper> list) {
-    std::unordered_set<std::string> s;
-    std::unordered_set<std::string>::const_iterator it = s.begin();
+    auto s = std::make_shared<form::FormWrapperSet>(form::FormWrapperSet{});
+    form::FormWrapperSet::const_iterator it = s->begin();
     for (auto item : list) {
-        s.insert(it, prStr(item.form));
+        s->insert(it, item);
     }
     return s;
 }
@@ -417,7 +490,7 @@ std::string prStr(form::Form form) {
         case form::MAP:
             return "{" + prStr(std::get<std::map<std::string, form::FormWrapper> >(form)) + "}";
         case form::SET:
-            return "#{" + prStr<std::unordered_set<std::string> >(std::get<std::unordered_set<std::string> >(form)) + "}";
+            return "#{" + prStr<form::FormWrapperSet>(*std::get<std::shared_ptr<form::FormWrapperSet>>(form)) + "}";
     }
     return "";
 }
