@@ -3,7 +3,7 @@
 #include <string>
 #include <list>
 #include <vector>
-#include <map>
+#include <unordered_map>
 #include <unordered_set>
 #include <variant>
 #include <regex>
@@ -63,6 +63,7 @@ namespace zachlisp {
     struct FormWrapper;
     class FormWrapperHash;
 
+    using FormWrapperMap = std::unordered_map<FormWrapper, FormWrapper, FormWrapperHash>;
     using FormWrapperSet = std::unordered_set<FormWrapper, FormWrapperHash>;
 
     using Form = std::variant<
@@ -70,7 +71,11 @@ namespace zachlisp {
         token::Token,
         std::list<FormWrapper>,
         std::vector<FormWrapper>,
-        std::map<std::string, FormWrapper>,
+        // maps and sets must be stored with a layer of indirection
+        // to satisfy the type syetem.
+        // their content needs to be hashable
+        // and that isn't implemented until later...
+        std::shared_ptr<FormWrapperMap>,
         std::shared_ptr<FormWrapperSet>
     >;
 
@@ -79,6 +84,9 @@ namespace zachlisp {
     }
 
 /*
+// I might use this later.
+// see: https://stackoverflow.com/a/38140932
+
 inline void hash_combine(std::size_t& seed) { }
 
 template <typename T, typename... Rest>
@@ -169,6 +177,7 @@ namespace zachlisp {
         FormWrapper(Form f) : form(f) {}
 
         bool operator==(const FormWrapper & fw) const {
+            // TODO: compare these properly
             return hash(*this) == hash(fw);
         }
     };
@@ -183,12 +192,13 @@ namespace zachlisp {
     std::size_t hash(const FormWrapper & fw) {
         std::size_t ret = 0;
         switch (fw.form.index()) {
+            case READER_ERROR:
+                break;
             case TOKEN:
                 {
                     auto token = std::get<token::Token>(fw.form);
                     return std::hash<token::Token>()(token);
                 }
-            case READER_ERROR:
             case LIST:
             case VECTOR:
             case MAP:
@@ -201,7 +211,7 @@ namespace zachlisp {
 
     }
 
-std::map<std::variant<char, std::string>, std::string> EXPANDED_NAMES = {
+std::unordered_map<std::variant<char, std::string>, std::string> EXPANDED_NAMES = {
     {'\'', "quote"},
     {'`', "quasiquote"},
     {'~', "unquote"},
@@ -210,14 +220,14 @@ std::map<std::variant<char, std::string>, std::string> EXPANDED_NAMES = {
     {"~@", "splice-unquote"}
 };
 
-std::map<std::variant<char, std::string>, form::FormIndex> COLL_NAMES = {
+std::unordered_map<std::variant<char, std::string>, form::FormIndex> COLL_NAMES = {
     {'(', form::LIST},
     {'[', form::VECTOR},
     {'{', form::MAP},
     {"#{", form::SET},
 };
 
-std::map<form::FormIndex, char> END_DELIMITERS = {
+std::unordered_map<form::FormIndex, char> END_DELIMITERS = {
     {form::LIST, ')'},
     {form::VECTOR, ']'},
     {form::MAP, '}'},
@@ -237,8 +247,8 @@ form::Form listToVector(const std::list<form::FormWrapper> list) {
 }
 
 form::Form listToMap(const std::list<form::FormWrapper> list) {
-    std::map<std::string, form::FormWrapper> m;
-    std::map<std::string, form::FormWrapper>::const_iterator mapIt = m.begin();
+    auto m = std::make_shared<form::FormWrapperMap>(form::FormWrapperMap{});
+    form::FormWrapperMap::const_iterator mapIt = m->begin();
     std::list<form::FormWrapper>::const_iterator listIt = list.begin();
     while (listIt != list.end()) {
         auto key = *listIt;
@@ -248,8 +258,7 @@ form::Form listToMap(const std::list<form::FormWrapper> list) {
         } else {
             auto val = *listIt;
             ++listIt;
-            m.insert(mapIt, std::pair(prStr(key.form), val));
-            ++mapIt;
+            m->insert(mapIt, std::pair(key, val));
         }
     }
     return m;
@@ -463,13 +472,13 @@ std::string prStr(T list) {
     return s;
 }
 
-std::string prStr(std::map<std::string, form::FormWrapper> map) {
+std::string prStr(form::FormWrapperMap map) {
     std::string s;
     for (auto item : map) {
         if (s.size() > 0) {
             s += " ";
         }
-        s += item.first + " " + prStr(item.second.form);
+        s += prStr(item.first.form) + " " + prStr(item.second.form);
     }
     return s;
 }
@@ -488,7 +497,7 @@ std::string prStr(form::Form form) {
         case form::VECTOR:
             return "[" + prStr<std::vector<form::FormWrapper> >(std::get<std::vector<form::FormWrapper> >(form)) + "]";
         case form::MAP:
-            return "{" + prStr(std::get<std::map<std::string, form::FormWrapper> >(form)) + "}";
+            return "{" + prStr(*std::get<std::shared_ptr<form::FormWrapperMap>>(form)) + "}";
         case form::SET:
             return "#{" + prStr<form::FormWrapperSet>(*std::get<std::shared_ptr<form::FormWrapperSet>>(form)) + "}";
     }
