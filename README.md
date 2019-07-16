@@ -1,6 +1,10 @@
+## Introduction
+
+ZachLisp is a little lisp I'm writing in C++17. It's pretty useless right now.
+
 ## Build Instructions
 
-On Windows, install [Scoop](https://scoop.sh) and then run `scoop install gcc` to get the compiler.
+On Linux, run `./repl.sh`. On Windows, install [Scoop](https://scoop.sh), and then in PowerShell run `scoop install gcc` and `.\repl.ps1`.
 
 ## Licensing
 
