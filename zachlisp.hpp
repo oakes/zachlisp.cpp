@@ -48,6 +48,52 @@ namespace zachlisp {
         Token(value::Value v, type::Type t, int l, int c) : value(v), type(t), line(l), column(c) {}
     };
 
+    value::Value parse(std::string value, type::Type type) {
+        switch (type) {
+            case type::SPECIAL_CHAR:
+                return value[0];
+            case type::NUMBER:
+                if (value.find('.') == std::string::npos) {
+                    return std::stol(value);
+                } else {
+                    return std::stod(value);
+                }
+            case type::SYMBOL:
+                if (value == "true") {
+                    return true;
+                } else if (value == "false") {
+                    return false;
+                }
+        }
+        return value;
+    }
+
+    std::list<Token> tokenize(std::string input) {
+        std::sregex_iterator begin(input.begin(), input.end(), REGEX);
+        std::sregex_iterator end;
+
+        std::list<Token> tokens;
+
+        int line = 1;
+
+        for (auto it = begin; it != end; ++it) {
+            std::smatch match = *it;
+            for(auto i = 1; i < match.size(); ++i){
+               if (!match[i].str().empty()) {
+                   std::string valueStr = match.str();
+                   type::Type type = static_cast<type::Type>(i-1);
+                   value::Value value = parse(valueStr, type);
+                   int column = match.position() + 1;
+                   tokens.push_back(Token{value, type, line, column});
+                   line += std::count(valueStr.begin(), valueStr.end(), '\n');
+                   break;
+               }
+            }
+        }
+
+        return tokens;
+    }
+
     }
 
     // zachlisp::form
@@ -103,52 +149,6 @@ std::map<form::FormIndex, char> END_DELIMITERS = {
     {form::MAP, '}'},
     {form::SET, '}'}
 };
-
-token::value::Value parse(std::string value, token::type::Type type) {
-    switch (type) {
-        case token::type::SPECIAL_CHAR:
-            return value[0];
-        case token::type::NUMBER:
-            if (value.find('.') == std::string::npos) {
-                return std::stol(value);
-            } else {
-                return std::stod(value);
-            }
-        case token::type::SYMBOL:
-            if (value == "true") {
-                return true;
-            } else if (value == "false") {
-                return false;
-            }
-    }
-    return value;
-}
-
-std::list<token::Token> tokenize(std::string input) {
-    std::sregex_iterator begin(input.begin(), input.end(), token::REGEX);
-    std::sregex_iterator end;
-
-    std::list<token::Token> tokens;
-
-    int line = 1;
-
-    for (auto it = begin; it != end; ++it) {
-        std::smatch match = *it;
-        for(auto i = 1; i < match.size(); ++i){
-           if (!match[i].str().empty()) {
-               std::string valueStr = match.str();
-               token::type::Type type = static_cast<token::type::Type>(i-1);
-               token::value::Value value = parse(valueStr, type);
-               int column = match.position() + 1;
-               tokens.push_back(token::Token{value, type, line, column});
-               line += std::count(valueStr.begin(), valueStr.end(), '\n');
-               break;
-           }
-        }
-    }
-
-    return tokens;
-}
 
 std::pair<form::Form, std::list<token::Token>::const_iterator> readForm(const std::list<token::Token> *tokens, std::list<token::Token>::const_iterator it);
 std::optional<std::pair<form::Form, std::list<token::Token>::const_iterator> > readUsefulForm(const std::list<token::Token> *tokens, std::list<token::Token>::const_iterator it);
@@ -423,7 +423,7 @@ std::string prStr(form::Form form) {
 }
 
 std::list<form::Form> READ(const std::string input) {
-    auto tokens = tokenize(input);
+    auto tokens = token::tokenize(input);
     auto forms = readForms(&tokens);
     return forms;
 }
