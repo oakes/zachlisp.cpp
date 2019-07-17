@@ -8,7 +8,7 @@ int main(int argc, char* argv[]) {
     do {
         std::cout << "user> ";
         std::getline(std::cin, input);
-        std::cout << zachlisp::rep(input);
+        std::cout << zachlisp::print(zachlisp::eval(zachlisp::read(input)));
     } while (!std::cin.fail());
     return 0;
 }
