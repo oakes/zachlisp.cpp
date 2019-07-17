@@ -90,10 +90,11 @@ namespace zachlisp {
 
     enum FormIndex {READER_ERROR, TOKEN, LIST, VECTOR, MAP, SET};
 
+    std::size_t hash(const FormWrapper & fw);
+    bool equals(const FormWrapper & fw1, const FormWrapper & fw2);
+
     }
 
-/*
-// I might use this later.
 // see: https://stackoverflow.com/a/38140932
 
 inline void hash_combine(std::size_t& seed) { }
@@ -104,9 +105,6 @@ inline void hash_combine(std::size_t& seed, const T& v, Rest... rest) {
     seed ^= hasher(v) + 0x9e3779b9 + (seed<<6) + (seed>>2);
     hash_combine(seed, rest...);
 }
-*/
-
-std::string prStr(form::Form form);
 
 }
 
@@ -117,6 +115,22 @@ template <> struct hash<zachlisp::token::Token>
     size_t operator()(const zachlisp::token::Token & x) const
     {
         return std::hash<zachlisp::token::value::Value>()(x.value);
+    }
+};
+
+template <> struct hash<zachlisp::form::ReaderError>
+{
+    size_t operator()(const zachlisp::form::ReaderError & x) const
+    {
+        return std::hash<std::string>()(x.message);
+    }
+};
+
+template <> struct hash<zachlisp::form::FormWrapper>
+{
+    size_t operator()(const zachlisp::form::FormWrapper & x) const
+    {
+        return zachlisp::form::hash(x);
     }
 };
 
@@ -178,9 +192,6 @@ namespace zachlisp {
     // zachlisp::form
     namespace form {
 
-    std::size_t hash(const FormWrapper & fw);
-    bool equals(const FormWrapper & fw1, const FormWrapper & fw2);
-
     struct FormWrapper {
         Form form;
 
@@ -204,25 +215,58 @@ namespace zachlisp {
             return equals(fw1, fw2);
         }
     };
+    
+    template <class T>
+    std::size_t hashColl(T list) {
+        std::size_t ret = 0;
+        for (auto item : list) {
+            hash_combine(ret, item);
+        }
+        return ret;
+    }
+
+    std::size_t hashMap(FormWrapperMap map) {
+        std::size_t ret = 0;
+        for (auto item : map) {
+            hash_combine(ret, item.first, item.second);
+        }
+        return ret;
+    }
 
     std::size_t hash(const FormWrapper & fw) {
-        std::size_t ret = 0;
         switch (fw.form.index()) {
             case READER_ERROR:
-                break;
+                {
+                    auto token = std::get<form::ReaderError>(fw.form);
+                    return std::hash<form::ReaderError>()(token);
+                }
             case TOKEN:
                 {
                     auto token = std::get<token::Token>(fw.form);
                     return std::hash<token::Token>()(token);
                 }
             case LIST:
+                {
+                    auto list = std::get<std::list<FormWrapper>>(fw.form);
+                    return hashColl<std::list<FormWrapper>>(list);
+                }
             case VECTOR:
+                {
+                    auto vector = std::get<std::vector<FormWrapper>>(fw.form);
+                    return hashColl<std::vector<FormWrapper>>(vector);
+                }
             case MAP:
+                {
+                    auto map = *std::get<std::shared_ptr<FormWrapperMap>>(fw.form);
+                    return hashMap(map);
+                }
             case SET:
-                break;
+                {
+                    auto set = *std::get<std::shared_ptr<FormWrapperSet>>(fw.form);
+                    return hashColl<FormWrapperSet>(set);
+                }
         }
-        // TODO: hash these properly
-        return std::hash<std::string>()(prStr(fw.form));
+        return 0;
     }
 
     bool equals(const FormWrapper & fw1, const FormWrapper & fw2) {
@@ -471,6 +515,8 @@ std::string prStr(token::Token token) {
     }
     return "";
 }
+
+std::string prStr(form::Form form);
 
 std::string prStr(form::FormWrapper formWrapper) {
     return prStr(formWrapper.form);
