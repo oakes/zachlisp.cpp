@@ -46,6 +46,10 @@ namespace zachlisp {
         int column;
 
         Token(value::Value v, type::Type t, int l, int c) : value(v), type(t), line(l), column(c) {}
+
+        bool operator==(const Token & t) const {
+            return (value == t.value) && (type == t.type);
+        }
     };
 
     }
@@ -58,13 +62,18 @@ namespace zachlisp {
         std::optional<token::Token> token;
 
         ReaderError(std::string m, std::optional<token::Token> t) : message(m), token(t) {}
+
+        bool operator==(const ReaderError & re) const {
+            return (!message.compare(re.message)) && (token == re.token);
+        }
     };
 
     struct FormWrapper;
     class FormWrapperHash;
+    class FormWrapperEquality;
 
-    using FormWrapperMap = std::unordered_map<FormWrapper, FormWrapper, FormWrapperHash>;
-    using FormWrapperSet = std::unordered_set<FormWrapper, FormWrapperHash>;
+    using FormWrapperMap = std::unordered_map<FormWrapper, FormWrapper, FormWrapperHash, FormWrapperEquality>;
+    using FormWrapperSet = std::unordered_set<FormWrapper, FormWrapperHash, FormWrapperEquality>;
 
     using Form = std::variant<
         ReaderError,
@@ -170,6 +179,7 @@ namespace zachlisp {
     namespace form {
 
     std::size_t hash(const FormWrapper & fw);
+    bool equals(const FormWrapper & fw1, const FormWrapper & fw2);
 
     struct FormWrapper {
         Form form;
@@ -177,8 +187,7 @@ namespace zachlisp {
         FormWrapper(Form f) : form(f) {}
 
         bool operator==(const FormWrapper & fw) const {
-            // TODO: compare these properly
-            return hash(*this) == hash(fw);
+            return equals(*this, fw);
         }
     };
 
@@ -186,6 +195,13 @@ namespace zachlisp {
     public:
         std::size_t operator()(const FormWrapper & fw) const {
             return hash(fw);
+        }
+    };
+
+    class FormWrapperEquality {
+    public:
+        bool operator()(const FormWrapper & fw1, const FormWrapper & fw2) const {
+            return equals(fw1, fw2);
         }
     };
 
@@ -207,6 +223,10 @@ namespace zachlisp {
         }
         // TODO: hash these properly
         return std::hash<std::string>()(prStr(fw.form));
+    }
+
+    bool equals(const FormWrapper & fw1, const FormWrapper & fw2) {
+        return fw1.form == fw2.form;
     }
 
     }
