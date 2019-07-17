@@ -110,26 +110,20 @@ inline void hash_combine(std::size_t& seed, const T& v, Rest... rest) {
 
 namespace std {
 
-template <> struct hash<zachlisp::token::Token>
-{
-    size_t operator()(const zachlisp::token::Token & x) const
-    {
+template <> struct hash<zachlisp::token::Token> {
+    size_t operator()(const zachlisp::token::Token & x) const {
         return std::hash<zachlisp::token::value::Value>()(x.value);
     }
 };
 
-template <> struct hash<zachlisp::form::ReaderError>
-{
-    size_t operator()(const zachlisp::form::ReaderError & x) const
-    {
+template <> struct hash<zachlisp::form::ReaderError> {
+    size_t operator()(const zachlisp::form::ReaderError & x) const {
         return std::hash<std::string>()(x.message);
     }
 };
 
-template <> struct hash<zachlisp::form::FormWrapper>
-{
-    size_t operator()(const zachlisp::form::FormWrapper & x) const
-    {
+template <> struct hash<zachlisp::form::FormWrapper> {
+    size_t operator()(const zachlisp::form::FormWrapper & x) const {
         return zachlisp::form::hash(x);
     }
 };
@@ -294,7 +288,7 @@ namespace zachlisp {
 
     }
 
-std::unordered_map<std::variant<char, std::string>, std::string> EXPANDED_NAMES = {
+const std::unordered_map<std::variant<char, std::string>, std::string> EXPANDED_NAMES = {
     {'\'', "quote"},
     {'`', "quasiquote"},
     {'~', "unquote"},
@@ -303,14 +297,14 @@ std::unordered_map<std::variant<char, std::string>, std::string> EXPANDED_NAMES 
     {"~@", "splice-unquote"}
 };
 
-std::unordered_map<std::variant<char, std::string>, form::FormIndex> COLL_NAMES = {
+const std::unordered_map<std::variant<char, std::string>, form::FormIndex> COLL_NAMES = {
     {'(', form::LIST},
     {'[', form::VECTOR},
     {'{', form::MAP},
     {"#{", form::SET},
 };
 
-std::unordered_map<form::FormIndex, char> END_DELIMITERS = {
+const std::unordered_map<form::FormIndex, char> END_DELIMITERS = {
     {form::LIST, ')'},
     {form::VECTOR, ']'},
     {form::MAP, '}'},
@@ -357,7 +351,7 @@ form::Form listToSet(const std::list<form::FormWrapper> list) {
 }
 
 std::pair<form::Form, std::list<token::Token>::const_iterator> readColl(const std::list<token::Token> *tokens, std::list<token::Token>::const_iterator it, form::FormIndex formName) {
-    char endDelimiter = END_DELIMITERS[formName];
+    char endDelimiter = END_DELIMITERS.at(formName);
     std::list<form::FormWrapper> forms;
     while (auto retOpt = readUsefulToken(tokens, it)) {
         auto ret = retOpt.value();
@@ -433,9 +427,9 @@ std::pair<form::Form, std::list<token::Token>::const_iterator> readForm(const st
             {
                 std::string s = std::get<std::string>(token.value);
                 if (s == "#{") {
-                    return readColl(tokens, ++it, COLL_NAMES[s]);
+                    return readColl(tokens, ++it, COLL_NAMES.at(s));
                 } else if (s == "~@") {
-                    return expandQuotedForm(tokens, ++it, token::Token{EXPANDED_NAMES[s], token::type::SYMBOL, token.line, token.column});
+                    return expandQuotedForm(tokens, ++it, token::Token{EXPANDED_NAMES.at(s), token::type::SYMBOL, token.line, token.column});
                 }
                 break;
             }
@@ -446,7 +440,7 @@ std::pair<form::Form, std::list<token::Token>::const_iterator> readForm(const st
                     case '(':
                     case '[':
                     case '{':
-                        return readColl(tokens, ++it, COLL_NAMES[c]);
+                        return readColl(tokens, ++it, COLL_NAMES.at(c));
                     case ')':
                     case ']':
                     case '}':
@@ -455,9 +449,9 @@ std::pair<form::Form, std::list<token::Token>::const_iterator> readForm(const st
                     case '`':
                     case '~':
                     case '@':
-                        return expandQuotedForm(tokens, ++it, token::Token{EXPANDED_NAMES[c], token::type::SYMBOL, token.line, token.column});
+                        return expandQuotedForm(tokens, ++it, token::Token{EXPANDED_NAMES.at(c), token::type::SYMBOL, token.line, token.column});
                     case '^':
-                        return expandMetaQuotedForm(tokens, ++it, token::Token{EXPANDED_NAMES[c], token::type::SYMBOL, token.line, token.column});
+                        return expandMetaQuotedForm(tokens, ++it, token::Token{EXPANDED_NAMES.at(c), token::type::SYMBOL, token.line, token.column});
                 }
                 break;
             }
