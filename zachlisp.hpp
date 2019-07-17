@@ -225,10 +225,34 @@ namespace zachlisp {
         return ret;
     }
 
-    std::size_t hashMap(FormWrapperMap map) {
+    std::size_t hash(FormWrapperSet set) {
+        std::vector<std::size_t> hashes;
+        for (auto item : set) {
+            hashes.push_back(hash(item));
+        }
+
+        std::sort(hashes.begin(), hashes.end());
+
         std::size_t ret = 0;
+        for (auto hash : hashes) {
+            hash_combine(ret, hash);
+        }
+        return ret;
+    }
+
+    std::size_t hash(FormWrapperMap map) {
+        std::vector<std::size_t> hashes;
         for (auto item : map) {
-            hash_combine(ret, item.first, item.second);
+            std::size_t hash = 0;
+            hash_combine(hash, item.first, item.second);
+            hashes.push_back(hash);
+        }
+
+        std::sort(hashes.begin(), hashes.end());
+
+        std::size_t ret = 0;
+        for (auto hash : hashes) {
+            hash_combine(ret, hash);
         }
         return ret;
     }
@@ -237,8 +261,8 @@ namespace zachlisp {
         switch (fw.form.index()) {
             case READER_ERROR:
                 {
-                    auto token = std::get<form::ReaderError>(fw.form);
-                    return std::hash<form::ReaderError>()(token);
+                    auto error = std::get<form::ReaderError>(fw.form);
+                    return std::hash<form::ReaderError>()(error);
                 }
             case TOKEN:
                 {
@@ -256,21 +280,16 @@ namespace zachlisp {
                     return hashColl<std::vector<FormWrapper>>(vector);
                 }
             case MAP:
-                {
-                    auto map = *std::get<std::shared_ptr<FormWrapperMap>>(fw.form);
-                    return hashMap(map);
-                }
+                return hash(*std::get<std::shared_ptr<FormWrapperMap>>(fw.form));
             case SET:
-                {
-                    auto set = *std::get<std::shared_ptr<FormWrapperSet>>(fw.form);
-                    return hashColl<FormWrapperSet>(set);
-                }
+                return hash(*std::get<std::shared_ptr<FormWrapperSet>>(fw.form));
         }
         return 0;
     }
 
     bool equals(const FormWrapper & fw1, const FormWrapper & fw2) {
-        return fw1.form == fw2.form;
+        // TODO: equality checking probably shouldn't rely on hashes
+        return hash(fw1) == hash(fw2);
     }
 
     }
