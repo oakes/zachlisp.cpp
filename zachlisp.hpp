@@ -572,10 +572,6 @@ std::list<form::Form> read(const std::string input) {
     return forms;
 }
 
-std::list<form::Form> eval(const std::list<form::Form> forms) {
-    return forms;
-}
-
 std::string print(const std::list<form::Form> forms) {
     std::string s;
     for (auto form : forms) {
