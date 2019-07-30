@@ -57,13 +57,14 @@ namespace zachlisp {
     // zachlisp::form
     namespace form {
 
-    struct ReaderError {
+    struct Special {
+        std::string name;
         std::string message;
         std::optional<token::Token> token;
 
-        ReaderError(std::string m, std::optional<token::Token> t) : message(m), token(t) {}
+        Special(std::string n, std::string m, std::optional<token::Token> t) : name(n), message(m), token(t) {}
 
-        bool operator==(const ReaderError & re) const {
+        bool operator==(const Special & re) const {
             return (!message.compare(re.message)) && (token == re.token);
         }
     };
@@ -76,7 +77,7 @@ namespace zachlisp {
     using FormWrapperSet = std::unordered_set<FormWrapper, FormWrapperHash, FormWrapperEquality>;
 
     using Form = std::variant<
-        ReaderError,
+        Special,
         token::Token,
         std::list<FormWrapper>,
         std::vector<FormWrapper>,
@@ -88,7 +89,7 @@ namespace zachlisp {
         std::shared_ptr<FormWrapperSet>
     >;
 
-    enum Type {READER_ERROR, TOKEN, LIST, VECTOR, MAP, SET};
+    enum Type {SPECIAL, TOKEN, LIST, VECTOR, MAP, SET};
 
     std::size_t hash(const FormWrapper & fw);
     bool equals(const FormWrapper & fw1, const FormWrapper & fw2);
@@ -116,8 +117,8 @@ template <> struct hash<zachlisp::token::Token> {
     }
 };
 
-template <> struct hash<zachlisp::form::ReaderError> {
-    size_t operator()(const zachlisp::form::ReaderError & x) const {
+template <> struct hash<zachlisp::form::Special> {
+    size_t operator()(const zachlisp::form::Special & x) const {
         return std::hash<std::string>()(x.message);
     }
 };
@@ -253,8 +254,8 @@ namespace zachlisp {
 
     std::size_t hash(const FormWrapper & fw) {
         switch (fw.form.index()) {
-            case READER_ERROR:
-                return std::hash<form::ReaderError>()(std::get<form::ReaderError>(fw.form));
+            case SPECIAL:
+                return std::hash<form::Special>()(std::get<form::Special>(fw.form));
             case TOKEN:
                 return std::hash<token::Token>()(std::get<token::Token>(fw.form));
             case LIST:
@@ -318,7 +319,7 @@ form::Form list_to_map(const std::list<form::FormWrapper> list) {
         auto key = *list_it;
         ++list_it;
         if (list_it == list.end()) {
-            return form::ReaderError{"Map must contain even number of forms", std::nullopt};
+            return form::Special{"ReaderError", "Map must contain even number of forms", std::nullopt};
         } else {
             auto val = *list_it;
             ++list_it;
@@ -362,7 +363,7 @@ std::pair<form::Form, std::list<token::Token>::const_iterator> read_coll(const s
                     case ')':
                     case ']':
                     case '}':
-                        return std::make_pair(form::ReaderError{"Unmatched delimiter: " + std::string(1, c), token}, tokens->end());
+                        return std::make_pair(form::Special{"ReaderError", "Unmatched delimiter: " + std::string(1, c), token}, tokens->end());
                 }
             }
         }
@@ -370,7 +371,7 @@ std::pair<form::Form, std::list<token::Token>::const_iterator> read_coll(const s
         forms.push_back(form::FormWrapper{ret2.first});
         it = ret2.second;
     }
-    return std::make_pair(form::ReaderError{"EOF: no " + std::string(1, end_delimiter) + " found", std::nullopt}, tokens->end());
+    return std::make_pair(form::Special{"ReaderError", "EOF: no " + std::string(1, end_delimiter) + " found", std::nullopt}, tokens->end());
 }
 
 std::pair<form::Form, std::list<token::Token>::const_iterator> expand_quoted_form(const std::list<token::Token> *tokens, std::list<token::Token>::const_iterator it, token::Token token) {
@@ -382,7 +383,7 @@ std::pair<form::Form, std::list<token::Token>::const_iterator> expand_quoted_for
         };
         return std::make_pair(list, ret.second);
     } else {
-        return std::make_pair(form::ReaderError{"EOF: Nothing found after quote", token}, tokens->end());
+        return std::make_pair(form::Special{"ReaderError", "EOF: Nothing found after quote", token}, tokens->end());
     }
 }
 
@@ -398,10 +399,10 @@ std::pair<form::Form, std::list<token::Token>::const_iterator> expand_meta_quote
             };
             return std::make_pair(list, ret2.second);
         } else {
-            return std::make_pair(form::ReaderError{"EOF: Nothing found after metadata", token}, tokens->end());
+            return std::make_pair(form::Special{"ReaderError", "EOF: Nothing found after metadata", token}, tokens->end());
         }
     } else {
-        return std::make_pair(form::ReaderError{"EOF: Nothing found after ^", token}, tokens->end());
+        return std::make_pair(form::Special{"ReaderError", "EOF: Nothing found after ^", token}, tokens->end());
     }
 }
 
@@ -429,7 +430,7 @@ std::pair<form::Form, std::list<token::Token>::const_iterator> read_form(const s
                     case ')':
                     case ']':
                     case '}':
-                        return std::make_pair(form::ReaderError{"Unmatched delimiter: " + std::string(1, c), token}, tokens->end());
+                        return std::make_pair(form::Special{"ReaderError", "Unmatched delimiter: " + std::string(1, c), token}, tokens->end());
                     case '\'':
                     case '`':
                     case '~':
@@ -444,7 +445,7 @@ std::pair<form::Form, std::list<token::Token>::const_iterator> read_form(const s
             {
                 std::string s = std::get<std::string>(token.value);
                 if (s.size() < 2 || s.back() != '"') {
-                    return std::make_pair(form::ReaderError{"EOF: unbalanced quote", token}, tokens->end());
+                    return std::make_pair(form::Special{"ReaderError", "EOF: unbalanced quote", token}, tokens->end());
                 } else {
                     token.value = s.substr(1, s.size() - 2);
                 }

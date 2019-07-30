@@ -62,10 +62,10 @@ std::string pr_str(form::FormWrapperMap map) {
 
 std::string pr_str(form::Form form) {
     switch (form.index()) {
-        case form::READER_ERROR:
+        case form::SPECIAL:
             {
-                auto error = std::get<form::ReaderError>(form);
-                return "#ReaderError \"" + error.message + "\"";
+                auto error = std::get<form::Special>(form);
+                return "#" + error.name + " \"" + error.message + "\"";
             }
         case form::TOKEN:
             return pr_str(std::get<token::Token>(form));
