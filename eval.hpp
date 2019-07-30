@@ -11,15 +11,24 @@ namespace zachlisp {
 
         namespace fn {
 
-            enum Type {ZERO, ONE};
+        enum Type {ZERO, ONE};
 
-            using Zero = std::function<chaiscript::Boxed_Value()>;
-            using One = std::function<chaiscript::Boxed_Value(chaiscript::Boxed_Value)>;
+        using Zero = std::function<chaiscript::Boxed_Value()>;
+        using One = std::function<chaiscript::Boxed_Value(chaiscript::Boxed_Value)>;
 
         }
 
     enum Type {SPECIAL, CHAI};
     using Maybe = std::variant<form::Special, chaiscript::Boxed_Value>;
+
+    }
+
+    namespace math {
+
+    const std::unordered_set<char> OPERATORS = {'+', '-', '*', '/'};
+
+    enum Type {SPECIAL, STRINGIFIED_NUMBER};
+    using Maybe = std::variant<form::Special, std::string>;
 
     }
 
@@ -45,6 +54,18 @@ chaiscript::Boxed_Value eval_token(token::Token token, chaiscript::ChaiScript* c
     }
 }
 
+math::Maybe chai_to_stringified_number(chaiscript::Boxed_Value bv, chaiscript::ChaiScript* chai) {
+    try {
+        return std::to_string(chaiscript::Boxed_Number(bv).get_as<long>());
+    } catch (const chaiscript::exception::bad_boxed_cast &) {}
+
+    try {
+        return std::to_string(chaiscript::Boxed_Number(bv).get_as<double>());
+    } catch (const chaiscript::exception::bad_boxed_cast &) {}
+
+    return form::Special{"RuntimeError", "Only numbers can be given to math operations", std::nullopt};
+}
+
 evaled::Maybe form_to_chai(form::Form form, chaiscript::ChaiScript* chai) {
     switch (form.index()) {
         case form::SPECIAL:
@@ -60,8 +81,47 @@ evaled::Maybe form_to_chai(form::Form form, chaiscript::ChaiScript* chai) {
                 if (list.size() == 0) {
                     return form::Special{"RuntimeError", "Empty list", std::nullopt};
                 } else {
-                    auto ret = form_to_chai(list.front().form, chai);
+                    auto first_form = list.front().form;
                     list.pop_front();
+
+                    std::vector<chaiscript::Boxed_Value> args;
+                    for (auto it = list.begin(); it != list.end(); ++it) {
+                        auto ret = form_to_chai((*it).form, chai);
+                        switch (ret.index()) {
+                            case evaled::SPECIAL:
+                                return ret;
+                            case evaled::CHAI:
+                                {
+                                    args.push_back(std::get<chaiscript::Boxed_Value>(ret));
+                                    break;
+                                }
+                        }
+                    }
+
+                    if (first_form.index() == form::TOKEN) {
+                        auto token = std::get<token::Token>(first_form);
+                        if (token.type == token::type::SYMBOL) {
+                            auto sym = std::get<std::string>(token.value);
+                            if (sym.size() == 1 && math::OPERATORS.find(sym.at(0)) != math::OPERATORS.end()) {
+                                std::string exp = "";
+                                for (auto it = args.begin(); it != args.end(); ++it) {
+                                    if (exp.size() > 0) {
+                                        exp += " " + sym + " ";
+                                    }
+                                    auto ret = chai_to_stringified_number(*it, chai);
+                                    switch (ret.index()) {
+                                        case math::SPECIAL:
+                                            return std::get<form::Special>(ret);
+                                        case math::STRINGIFIED_NUMBER:
+                                            exp += std::get<std::string>(ret);
+                                    }
+                                }
+                                return chai->eval(exp);
+                            }
+                        }
+                    }
+
+                    auto ret = form_to_chai(first_form, chai);
 
                     switch (ret.index()) {
                         case evaled::SPECIAL:
@@ -69,20 +129,6 @@ evaled::Maybe form_to_chai(form::Form form, chaiscript::ChaiScript* chai) {
                         case evaled::CHAI:
                             {
                                 auto fn = std::get<chaiscript::Boxed_Value>(ret);
-
-                                std::vector<chaiscript::Boxed_Value> args;
-                                for (auto it = list.begin(); it != list.end(); ++it) {
-                                    auto ret = form_to_chai((*it).form, chai);
-                                    switch (ret.index()) {
-                                        case evaled::SPECIAL:
-                                            return ret;
-                                        case evaled::CHAI:
-                                            {
-                                                args.push_back(std::get<chaiscript::Boxed_Value>(ret));
-                                                break;
-                                            }
-                                    }
-                                }
 
                                 switch (args.size()) {
                                     case evaled::fn::ZERO:
@@ -121,11 +167,11 @@ form::Form chai_to_form(chaiscript::Boxed_Value bv, chaiscript::ChaiScript* chai
     } catch (const chaiscript::exception::bad_boxed_cast &) {}
 
     try {
-        return token::Token{chai->boxed_cast<long>(bv), token::type::NUMBER, 0, 0};
+        return token::Token{chaiscript::Boxed_Number(bv).get_as<long>(), token::type::NUMBER, 0, 0};
     } catch (const chaiscript::exception::bad_boxed_cast &) {}
 
     try {
-        return token::Token{chai->boxed_cast<double>(bv), token::type::NUMBER, 0, 0};
+        return token::Token{chaiscript::Boxed_Number(bv).get_as<double>(), token::type::NUMBER, 0, 0};
     } catch (const chaiscript::exception::bad_boxed_cast &) {}
 
     try {
