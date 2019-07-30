@@ -202,19 +202,25 @@ form::Form chai_to_form(chaiscript::Boxed_Value bv, chaiscript::ChaiScript* chai
 std::list<form::Form> eval(std::list<form::Form> forms, chaiscript::ChaiScript* chai) {
     std::list<form::Form> new_forms;
     for (auto form : forms) {
-        auto evaled_form = form_to_chai(form, chai);
-        switch (evaled_form.index()) {
-            case evaled::SPECIAL:
-                {
-                    new_forms.push_back(std::get<form::Special>(evaled_form));
-                    break;
-                }
-            case evaled::CHAI:
-                {
-                    auto ret = chai_to_form(std::get<chaiscript::Boxed_Value>(evaled_form), chai);
-                    new_forms.push_back(ret);
-                    break;
-                }
+        try {
+            auto evaled_form = form_to_chai(form, chai);
+            switch (evaled_form.index()) {
+                case evaled::SPECIAL:
+                    {
+                        new_forms.push_back(std::get<form::Special>(evaled_form));
+                        break;
+                    }
+                case evaled::CHAI:
+                    {
+                        auto ret = chai_to_form(std::get<chaiscript::Boxed_Value>(evaled_form), chai);
+                        new_forms.push_back(ret);
+                        break;
+                    }
+            }
+        } catch (const chaiscript::exception::eval_error &e) {
+            new_forms.push_back(form::Special{"RuntimeError", e.what(), std::nullopt});
+        } catch (const chaiscript::exception::bad_boxed_cast &e) {
+            new_forms.push_back(form::Special{"RuntimeError", e.what(), std::nullopt});
         }
     }
     return new_forms;
