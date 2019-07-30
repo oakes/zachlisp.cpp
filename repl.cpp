@@ -1,7 +1,8 @@
 #include <iostream>
 #include <string>
 
-#include "zachlisp.hpp"
+#include "read.hpp"
+#include "print.hpp"
 
 int main(int argc, char* argv[]) {
     std::string input;
