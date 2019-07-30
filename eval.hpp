@@ -11,10 +11,15 @@ namespace zachlisp {
 
         namespace fn {
 
-        enum Type {ZERO, ONE};
+        enum Type {ZERO, ONE, TWO, THREE, FOUR, FIVE, SIX};
 
         using Zero = std::function<chaiscript::Boxed_Value()>;
         using One = std::function<chaiscript::Boxed_Value(chaiscript::Boxed_Value)>;
+        using Two = std::function<chaiscript::Boxed_Value(chaiscript::Boxed_Value, chaiscript::Boxed_Value)>;
+        using Three = std::function<chaiscript::Boxed_Value(chaiscript::Boxed_Value, chaiscript::Boxed_Value, chaiscript::Boxed_Value)>;
+        using Four = std::function<chaiscript::Boxed_Value(chaiscript::Boxed_Value, chaiscript::Boxed_Value, chaiscript::Boxed_Value, chaiscript::Boxed_Value)>;
+        using Five = std::function<chaiscript::Boxed_Value(chaiscript::Boxed_Value, chaiscript::Boxed_Value, chaiscript::Boxed_Value, chaiscript::Boxed_Value, chaiscript::Boxed_Value)>;
+        using Six = std::function<chaiscript::Boxed_Value(chaiscript::Boxed_Value, chaiscript::Boxed_Value, chaiscript::Boxed_Value, chaiscript::Boxed_Value, chaiscript::Boxed_Value, chaiscript::Boxed_Value)>;
 
         }
 
@@ -23,14 +28,7 @@ namespace zachlisp {
 
     }
 
-    namespace math {
-
-    const std::unordered_set<char> OPERATORS = {'+', '-', '*', '/'};
-
-    enum Type {SPECIAL, STRINGIFIED_NUMBER};
-    using Maybe = std::variant<form::Special, std::string>;
-
-    }
+const std::unordered_set<char> OPERATORS = {'+', '-', '*', '/'};
 
 chaiscript::Boxed_Value eval_token(token::Token token, chaiscript::ChaiScript* chai) {
     switch (token.value.index()) {
@@ -52,18 +50,6 @@ chaiscript::Boxed_Value eval_token(token::Token token, chaiscript::ChaiScript* c
                 }
             }
     }
-}
-
-math::Maybe chai_to_stringified_number(chaiscript::Boxed_Value bv, chaiscript::ChaiScript* chai) {
-    try {
-        return std::to_string(chaiscript::Boxed_Number(bv).get_as<long>());
-    } catch (const chaiscript::exception::bad_boxed_cast &) {}
-
-    try {
-        return std::to_string(chaiscript::Boxed_Number(bv).get_as<double>());
-    } catch (const chaiscript::exception::bad_boxed_cast &) {}
-
-    return form::Special{"RuntimeError", "Only numbers can be given to math operations", std::nullopt};
 }
 
 evaled::Maybe form_to_chai(form::Form form, chaiscript::ChaiScript* chai) {
@@ -98,51 +84,73 @@ evaled::Maybe form_to_chai(form::Form form, chaiscript::ChaiScript* chai) {
                         }
                     }
 
+                    std::string fn_name = "";
                     if (first_form.index() == form::TOKEN) {
                         auto token = std::get<token::Token>(first_form);
                         if (token.type == token::type::SYMBOL) {
-                            auto sym = std::get<std::string>(token.value);
-                            if (sym.size() == 1 && math::OPERATORS.find(sym.at(0)) != math::OPERATORS.end()) {
-                                std::string exp = "";
-                                for (auto it = args.begin(); it != args.end(); ++it) {
-                                    if (exp.size() > 0) {
-                                        exp += " " + sym + " ";
-                                    }
-                                    auto ret = chai_to_stringified_number(*it, chai);
-                                    switch (ret.index()) {
-                                        case math::SPECIAL:
-                                            return std::get<form::Special>(ret);
-                                        case math::STRINGIFIED_NUMBER:
-                                            exp += std::get<std::string>(ret);
-                                    }
-                                }
-                                return chai->eval(exp);
-                            }
+                            fn_name = std::get<std::string>(token.value);
                         }
                     }
 
-                    auto ret = form_to_chai(first_form, chai);
-
-                    switch (ret.index()) {
-                        case evaled::SPECIAL:
-                            return ret;
-                        case evaled::CHAI:
-                            {
-                                auto fn = std::get<chaiscript::Boxed_Value>(ret);
-
-                                switch (args.size()) {
-                                    case evaled::fn::ZERO:
-                                        {
-                                            auto fn_zero = chai->boxed_cast<evaled::fn::Zero>(fn);
-                                            return fn_zero();
-                                        }
-                                    case evaled::fn::ONE:
-                                        {
-                                            auto fn_one = chai->boxed_cast<evaled::fn::One>(fn);
-                                            return fn_one(args[0]);
-                                        }
-                                }
+                    if (fn_name.size() == 1 && OPERATORS.find(fn_name.at(0)) != OPERATORS.end()) {
+                        if (args.size() <= 1) {
+                            return form::Special{"RuntimeError", "Invalid number of arguments to " + fn_name, std::nullopt};
+                        } else {
+                            auto fn = chai->eval<evaled::fn::Two>("`" + fn_name + "`");
+                            auto ret = fn(args[0], args[1]);
+                            for (int i = 2; i < args.size(); i++) {
+                                ret = fn(ret, args[i]);
                             }
+                            return ret;
+                        }
+                    } else {
+                        auto ret = form_to_chai(first_form, chai);
+                        switch (ret.index()) {
+                            case evaled::SPECIAL:
+                                return ret;
+                            case evaled::CHAI:
+                                {
+                                    auto chai_fn = std::get<chaiscript::Boxed_Value>(ret);
+
+                                    switch (args.size()) {
+                                        case evaled::fn::ZERO:
+                                            {
+                                                auto fn = chai->boxed_cast<evaled::fn::Zero>(chai_fn);
+                                                return fn();
+                                            }
+                                        case evaled::fn::ONE:
+                                            {
+                                                auto fn = chai->boxed_cast<evaled::fn::One>(chai_fn);
+                                                return fn(args[0]);
+                                            }
+                                        case evaled::fn::TWO:
+                                            {
+                                                auto fn = chai->boxed_cast<evaled::fn::Two>(chai_fn);
+                                                return fn(args[0], args[1]);
+                                            }
+                                        case evaled::fn::THREE:
+                                            {
+                                                auto fn = chai->boxed_cast<evaled::fn::Three>(chai_fn);
+                                                return fn(args[0], args[1], args[2]);
+                                            }
+                                        case evaled::fn::FOUR:
+                                            {
+                                                auto fn = chai->boxed_cast<evaled::fn::Four>(chai_fn);
+                                                return fn(args[0], args[1], args[2], args[3]);
+                                            }
+                                        case evaled::fn::FIVE:
+                                            {
+                                                auto fn = chai->boxed_cast<evaled::fn::Five>(chai_fn);
+                                                return fn(args[0], args[1], args[2], args[3], args[4]);
+                                            }
+                                        case evaled::fn::SIX:
+                                            {
+                                                auto fn = chai->boxed_cast<evaled::fn::Six>(chai_fn);
+                                                return fn(args[0], args[1], args[2], args[3], args[4], args[5]);
+                                            }
+                                    }
+                                }
+                        }
                     }
                 }
             }
