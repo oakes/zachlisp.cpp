@@ -4,6 +4,10 @@
 
 namespace zachlisp {
 
+std::string escape_str(std::string s) {
+    return std::regex_replace(s, std::regex("\""), "\\\"");
+}
+
 std::string pr_str(token::Token token) {
     switch (token.value.index()) {
         case token::value::BOOL:
@@ -18,7 +22,7 @@ std::string pr_str(token::Token token) {
             {
                 std::string s = std::get<std::string>(token.value);
                 if (token.type == token::type::STRING) {
-                    return "\"" + s + "\"";
+                    return "\"" + escape_str(s) + "\"";
                 } else {
                     return s;
                 }
@@ -65,7 +69,7 @@ std::string pr_str(form::Form form) {
         case form::SPECIAL:
             {
                 auto error = std::get<form::Special>(form);
-                return "#" + error.name + " \"" + error.message + "\"";
+                return "#" + error.name + " \"" + escape_str(error.message) + "\"";
             }
         case form::TOKEN:
             return pr_str(std::get<token::Token>(form));
