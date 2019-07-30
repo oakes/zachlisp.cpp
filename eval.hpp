@@ -16,13 +16,10 @@ namespace zachlisp {
             using Zero = std::function<chaiscript::Boxed_Value()>;
             using One = std::function<chaiscript::Boxed_Value(chaiscript::Boxed_Value)>;
 
-            using Fn = std::variant<Zero, One>;
-            using Pair = std::pair<Fn, token::Token>;
-
         }
 
-    enum Type {FORM, FN_PAIR};
-    using Form = std::variant<form::Form, fn::Pair>;
+    enum Type {SPECIAL, CHAI};
+    using Maybe = std::variant<form::Special, chaiscript::Boxed_Value>;
 
     }
 
@@ -48,7 +45,69 @@ chaiscript::Boxed_Value eval_token(token::Token token, chaiscript::ChaiScript* c
     }
 }
 
-evaled::Form chai_to_form(chaiscript::Boxed_Value bv, token::Token token, chaiscript::ChaiScript* chai) {
+evaled::Maybe form_to_chai(form::Form form, chaiscript::ChaiScript* chai) {
+    switch (form.index()) {
+        case form::SPECIAL:
+            return std::get<form::Special>(form);
+        case form::TOKEN:
+            {
+                auto token = std::get<token::Token>(form);
+                return eval_token(token, chai);
+            }
+        case form::LIST:
+            {
+                auto list = std::get<std::list<form::FormWrapper>>(form);
+                if (list.size() == 0) {
+                    return form::Special{"RuntimeError", "Empty list", std::nullopt};
+                } else {
+                    auto ret = form_to_chai(list.front().form, chai);
+                    list.pop_front();
+
+                    switch (ret.index()) {
+                        case evaled::SPECIAL:
+                            return ret;
+                        case evaled::CHAI:
+                            {
+                                auto fn = std::get<chaiscript::Boxed_Value>(ret);
+
+                                std::vector<chaiscript::Boxed_Value> args;
+                                for (auto it = list.begin(); it != list.end(); ++it) {
+                                    auto ret = form_to_chai((*it).form, chai);
+                                    switch (ret.index()) {
+                                        case evaled::SPECIAL:
+                                            return ret;
+                                        case evaled::CHAI:
+                                            {
+                                                args.push_back(std::get<chaiscript::Boxed_Value>(ret));
+                                                break;
+                                            }
+                                    }
+                                }
+
+                                switch (args.size()) {
+                                    case evaled::fn::ZERO:
+                                        {
+                                            auto fn_zero = chai->boxed_cast<evaled::fn::Zero>(fn);
+                                            return fn_zero();
+                                        }
+                                    case evaled::fn::ONE:
+                                        {
+                                            auto fn_one = chai->boxed_cast<evaled::fn::One>(fn);
+                                            return fn_one(args[0]);
+                                        }
+                                }
+                            }
+                    }
+                }
+            }
+        //case form::VECTOR:
+        //case form::MAP:
+        //case form::SET:
+    }
+    return form::Special{"RuntimeError", "Form not recognized", std::nullopt};
+}
+
+form::Form chai_to_form(chaiscript::Boxed_Value bv, chaiscript::ChaiScript* chai) {
     if (bv.is_null()) {
         return token::Token{std::string("nil"), token::type::SYMBOL, 0, 0};
     }
@@ -74,87 +133,32 @@ evaled::Form chai_to_form(chaiscript::Boxed_Value bv, token::Token token, chaisc
     } catch (const chaiscript::exception::bad_boxed_cast &) {}
 
     try {
-        return std::make_pair(chai->boxed_cast<evaled::fn::Zero>(bv), token);
+        chai->boxed_cast<evaled::fn::Zero>(bv);
+        return form::Special{"Object", "function", std::nullopt};
     } catch (const chaiscript::exception::bad_boxed_cast &) {}
 
     try {
-        return std::make_pair(chai->boxed_cast<evaled::fn::One>(bv), token);
+        chai->boxed_cast<evaled::fn::One>(bv);
+        return form::Special{"Object", "function", std::nullopt};
     } catch (const chaiscript::exception::bad_boxed_cast &) {}
 
-    return form::Special{"RuntimeError", "Value not recognized", token};
-}
-
-evaled::Form eval_form(form::Form form, chaiscript::ChaiScript* chai) {
-    switch (form.index()) {
-        case form::SPECIAL:
-            return form;
-        case form::TOKEN:
-            {
-                auto token = std::get<token::Token>(form);
-                return chai_to_form(eval_token(token, chai), token, chai);
-            }
-        case form::LIST:
-            {
-                auto list = std::get<std::list<form::FormWrapper>>(form);
-                if (list.size() == 0) {
-                    return form;
-                } else {
-                    auto evaled_front = eval_form(list.front().form, chai);
-                    list.pop_front();
-
-                    switch (evaled_front.index()) {
-                        case evaled::FORM:
-                            return form::Special{"RuntimeError", "Invalid function", std::nullopt};
-                        case evaled::FN_PAIR:
-                            {
-                                auto pair = std::get<evaled::fn::Pair>(evaled_front);
-                                auto fn = pair.first;
-                                auto token = pair.second;
-
-                                std::vector<chaiscript::Boxed_Value> bvs;
-                                for (auto it = list.begin(); it != list.end(); ++it) {
-                                    auto token = std::get<token::Token>((*it).form);
-                                    bvs.push_back(eval_token(token, chai));
-                                }
-
-                                switch (fn.index()) {
-                                    case evaled::fn::ZERO:
-                                        {
-                                            auto fn_zero = std::get<evaled::fn::Zero>(fn);
-                                            return chai_to_form(fn_zero(), token, chai);
-                                        }
-                                    case evaled::fn::ONE:
-                                        {
-                                            auto fn_one = std::get<evaled::fn::One>(fn);
-                                            return chai_to_form(fn_one(bvs[0]), token, chai);
-                                        }
-                                }
-                            }
-                    }
-                }
-            }
-        //case form::VECTOR:
-        //case form::MAP:
-        //case form::SET:
-    }
-    return form;
+    return form::Special{"RuntimeError", "Value not recognized", std::nullopt};
 }
 
 std::list<form::Form> eval(std::list<form::Form> forms, chaiscript::ChaiScript* chai) {
     std::list<form::Form> new_forms;
     for (auto form : forms) {
-        auto evaled_form = eval_form(form, chai);
+        auto evaled_form = form_to_chai(form, chai);
         switch (evaled_form.index()) {
-            case evaled::Type::FORM:
+            case evaled::SPECIAL:
                 {
-                    new_forms.push_back(std::get<form::Form>(evaled_form));
+                    new_forms.push_back(std::get<form::Special>(evaled_form));
                     break;
                 }
-            case evaled::Type::FN_PAIR:
+            case evaled::CHAI:
                 {
-                    auto token = std::get<evaled::fn::Pair>(evaled_form).second;
-                    auto name = std::get<std::string>(token.value);
-                    new_forms.push_back(form::Special{"Function", name, token});
+                    auto ret = chai_to_form(std::get<chaiscript::Boxed_Value>(evaled_form), chai);
+                    new_forms.push_back(ret);
                     break;
                 }
         }
