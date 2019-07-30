@@ -93,9 +93,7 @@ evaled::Maybe form_to_chai(form::Form form, chaiscript::ChaiScript* chai) {
                     }
 
                     if (fn_name.size() == 1 && OPERATORS.find(fn_name.at(0)) != OPERATORS.end()) {
-                        if (args.size() <= 1) {
-                            return form::Special{"RuntimeError", "Invalid number of arguments to " + fn_name, std::nullopt};
-                        } else {
+                        if (args.size() >= 2) {
                             auto fn = chai->eval<evaled::fn::Two>("`" + fn_name + "`");
                             auto ret = fn(args[0], args[1]);
                             for (int i = 2; i < args.size(); i++) {
@@ -152,6 +150,8 @@ evaled::Maybe form_to_chai(form::Form form, chaiscript::ChaiScript* chai) {
                                 }
                         }
                     }
+
+                    return form::Special{"RuntimeError", "Invalid number of arguments function " + fn_name, std::nullopt};
                 }
             }
         //case form::VECTOR:
