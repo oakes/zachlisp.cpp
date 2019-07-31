@@ -281,7 +281,11 @@ form::Form chai_to_form(chaiscript::Boxed_Value bv, chaiscript::ChaiScript* chai
         if (chaiscript::Boxed_Number::is_floating_point(bv)) {
             return token::Token{chai->boxed_cast<double>(bv), token::type::NUMBER, 0, 0};
         } else {
-            return token::Token{chai->boxed_cast<long>(bv), token::type::NUMBER, 0, 0};
+            try {
+                return token::Token{chai->boxed_cast<long>(bv), token::type::NUMBER, 0, 0};
+            } catch (const chaiscript::exception::bad_boxed_cast &) {
+                return token::Token{(long)chai->boxed_cast<int>(bv), token::type::NUMBER, 0, 0};
+            }
         }
     } catch (const chaiscript::exception::bad_boxed_cast &) {}
 
