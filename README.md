@@ -1,8 +1,12 @@
 ## Introduction
 
-ZachLisp is a little lisp reader and printer written in C++17. The entire reader is in [read.hpp](read.hpp) and has no dependencies, so it's easy to throw into a project.
+You know what the world needs? Another Lisp. I wrote this one in C++17 and haven't figured out why it exists yet. It consists of three files:
 
-See [repl.cpp](repl.cpp) for an example of how to use it. You could probably use it as a dead simple [edn](https://github.com/edn-format/edn) reader. It supports the four Clojure data structures literals: `()` becomes `std::list`, `[]` becomes `std::vector`, `{}` becomes `std::unordered_map`, and `#{}` becomes `std::unordered_set`.
+* [read.hpp](read.hpp) reads lisp data into C++ data structures. It supports the four Clojure data structure literals: `()` becomes `std::list`, `[]` becomes `std::vector`, `{}` becomes `std::unordered_map`, and `#{}` becomes `std::unordered_set`. It has no dependencies so it can be easily used on its own as a dead simple [edn](https://github.com/edn-format/edn) reader.
+* [eval.hpp](eval.hpp) takes the result of `zachlisp::read` and evaluates it using [ChaiScript](http://chaiscript.com/).
+* [print.hpp](print.hpp) takes the result of `zachlisp::eval` and prints it back into lisp syntax.
+
+In [repl.cpp](repl.cpp) they are combined to create an interactive REPL.
 
 ## Build Instructions
 
