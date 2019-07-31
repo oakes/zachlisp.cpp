@@ -40,7 +40,7 @@ chaiscript::Boxed_Value eval_token(token::Token token, chaiscript::ChaiScript* c
             return chaiscript::Boxed_Value(std::get<long>(token.value));
         case token::value::DOUBLE:
             return chaiscript::Boxed_Value(std::get<double>(token.value));
-        case token::value::STRING:
+        default: //case token::value::STRING:
             {
                 auto s = std::get<std::string>(token.value);
                 if (token.type == token::type::SYMBOL) {
