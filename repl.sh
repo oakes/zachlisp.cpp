@@ -1,2 +1,2 @@
 #!/bin/bash
-g++ repl.cpp -o ${1:-zachlisp} -std=c++17 && ./${1:-zachlisp}
+g++ repl.cpp -O3 -ldl -lpthread -o ${1:-zachlisp} -std=c++17 && ./${1:-zachlisp}
