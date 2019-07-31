@@ -154,7 +154,26 @@ evaled::Maybe form_to_chai(form::Form form, chaiscript::ChaiScript* chai) {
                     return form::Special{"RuntimeError", "Invalid number of arguments function " + fn_name, std::nullopt};
                 }
             }
-        //case form::VECTOR:
+        case form::VECTOR:
+            {
+                auto vec = std::get<std::vector<form::FormWrapper>>(form);
+                auto new_vec = std::vector<chaiscript::Boxed_Value>();
+
+                for (auto it = vec.begin(); it != vec.end(); ++it) {
+                    auto ret = form_to_chai((*it).form, chai);
+                    switch (ret.index()) {
+                        case evaled::SPECIAL:
+                            return ret;
+                        case evaled::CHAI:
+                            {
+                                new_vec.push_back(std::get<chaiscript::Boxed_Value>(ret));
+                                break;
+                            }
+                    }
+                }
+
+                return chaiscript::Boxed_Value(new_vec);
+            }
         //case form::MAP:
         //case form::SET:
     }
@@ -165,6 +184,17 @@ form::Form chai_to_form(chaiscript::Boxed_Value bv, chaiscript::ChaiScript* chai
     if (bv.is_null()) {
         return token::Token{std::string("nil"), token::type::SYMBOL, 0, 0};
     }
+
+    try {
+        auto vec = chai->boxed_cast<std::vector<chaiscript::Boxed_Value>>(bv);
+        auto new_vec = std::vector<form::FormWrapper>();
+
+        for (auto it = vec.begin(); it != vec.end(); ++it) {
+            new_vec.push_back(form::FormWrapper{chai_to_form(*it, chai)});
+        }
+
+        return new_vec;
+    } catch (const chaiscript::exception::bad_boxed_cast &) {}
 
     try {
         return token::Token{chai->boxed_cast<bool>(bv), token::type::SYMBOL, 0, 0};
@@ -220,6 +250,8 @@ std::list<form::Form> eval(std::list<form::Form> forms, chaiscript::ChaiScript* 
         } catch (const chaiscript::exception::eval_error &e) {
             new_forms.push_back(form::Special{"RuntimeError", e.what(), std::nullopt});
         } catch (const chaiscript::exception::bad_boxed_cast &e) {
+            new_forms.push_back(form::Special{"RuntimeError", e.what(), std::nullopt});
+        } catch (const chaiscript::detail::exception::bad_any_cast &e) {
             new_forms.push_back(form::Special{"RuntimeError", e.what(), std::nullopt});
         }
     }
