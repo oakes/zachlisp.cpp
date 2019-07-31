@@ -23,8 +23,8 @@ namespace zachlisp {
 
         }
 
-    enum Type {FORM, CHAI};
-    using Maybe = std::variant<form::Form, chaiscript::Boxed_Value>;
+    enum Type {SPECIAL, CHAI};
+    using Maybe = std::variant<form::Special, chaiscript::Boxed_Value>;
 
     }
 
@@ -40,7 +40,7 @@ chaiscript::Boxed_Value eval_token(token::Token token, chaiscript::ChaiScript* c
             return chaiscript::Boxed_Value(std::get<long>(token.value));
         case token::value::DOUBLE:
             return chaiscript::Boxed_Value(std::get<double>(token.value));
-        default: //case token::value::STRING:
+        case token::value::STRING:
             {
                 auto s = std::get<std::string>(token.value);
                 if (token.type == token::type::SYMBOL) {
@@ -74,7 +74,7 @@ evaled::Maybe form_to_chai(form::Form form, chaiscript::ChaiScript* chai) {
                     for (auto it = list.begin(); it != list.end(); ++it) {
                         auto ret = form_to_chai((*it).form, chai);
                         switch (ret.index()) {
-                            case evaled::FORM:
+                            case evaled::SPECIAL:
                                 return ret;
                             case evaled::CHAI:
                                 {
@@ -104,7 +104,7 @@ evaled::Maybe form_to_chai(form::Form form, chaiscript::ChaiScript* chai) {
                     } else {
                         auto ret = form_to_chai(first_form, chai);
                         switch (ret.index()) {
-                            case evaled::FORM:
+                            case evaled::SPECIAL:
                                 return ret;
                             case evaled::CHAI:
                                 {
@@ -154,10 +154,9 @@ evaled::Maybe form_to_chai(form::Form form, chaiscript::ChaiScript* chai) {
                     return form::Special{"RuntimeError", "Invalid number of arguments function " + fn_name, std::nullopt};
                 }
             }
-        case form::VECTOR:
-        case form::MAP:
-        case form::SET:
-            return form;
+        //case form::VECTOR:
+        //case form::MAP:
+        //case form::SET:
     }
     return form::Special{"RuntimeError", "Form not recognized", std::nullopt};
 }
@@ -206,9 +205,9 @@ std::list<form::Form> eval(std::list<form::Form> forms, chaiscript::ChaiScript* 
         try {
             auto evaled_form = form_to_chai(form, chai);
             switch (evaled_form.index()) {
-                case evaled::FORM:
+                case evaled::SPECIAL:
                     {
-                        new_forms.push_back(std::get<form::Form>(evaled_form));
+                        new_forms.push_back(std::get<form::Special>(evaled_form));
                         break;
                     }
                 case evaled::CHAI:
