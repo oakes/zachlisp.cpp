@@ -278,11 +278,11 @@ form::Form chai_to_form(chaiscript::Boxed_Value bv, chaiscript::ChaiScript* chai
     } catch (const chaiscript::exception::bad_boxed_cast &) {}
 
     try {
-        return token::Token{chaiscript::Boxed_Number(bv).get_as<long>(), token::type::NUMBER, 0, 0};
-    } catch (const chaiscript::exception::bad_boxed_cast &) {}
-
-    try {
-        return token::Token{chaiscript::Boxed_Number(bv).get_as<double>(), token::type::NUMBER, 0, 0};
+        if (chaiscript::Boxed_Number::is_floating_point(bv)) {
+            return token::Token{chai->boxed_cast<double>(bv), token::type::NUMBER, 0, 0};
+        } else {
+            return token::Token{chai->boxed_cast<long>(bv), token::type::NUMBER, 0, 0};
+        }
     } catch (const chaiscript::exception::bad_boxed_cast &) {}
 
     try {
