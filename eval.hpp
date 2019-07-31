@@ -3,6 +3,7 @@
 #include <functional>
 
 #include "read.hpp"
+#include "print.hpp"
 #include "chaiscript/chaiscript.hpp"
 
 namespace zachlisp {
@@ -51,6 +52,8 @@ chaiscript::Boxed_Value eval_token(token::Token token, chaiscript::ChaiScript* c
             }
     }
 }
+
+form::Form chai_to_form(chaiscript::Boxed_Value bv, chaiscript::ChaiScript* chai);
 
 evaled::Maybe form_to_chai(form::Form form, chaiscript::ChaiScript* chai) {
     switch (form.index()) {
@@ -174,8 +177,50 @@ evaled::Maybe form_to_chai(form::Form form, chaiscript::ChaiScript* chai) {
 
                 return chaiscript::Boxed_Value(new_vec);
             }
-        //case form::MAP:
-        //case form::SET:
+        case form::MAP:
+            {
+                auto map = *std::get<std::shared_ptr<form::FormWrapperMap>>(form);
+                auto new_map = std::map<std::string, chaiscript::Boxed_Value>();
+                auto new_map_it = new_map.begin();
+
+                for (auto it = map.begin(); it != map.end(); ++it) {
+                    auto key = form_to_chai((*it).first.form, chai);
+                    switch (key.index()) {
+                        case evaled::SPECIAL:
+                            return key;
+                    }
+                    auto val = form_to_chai((*it).second.form, chai);
+                    switch (val.index()) {
+                        case evaled::SPECIAL:
+                            return key;
+                    }
+                    auto new_key = std::get<chaiscript::Boxed_Value>(key);
+                    auto new_val = std::get<chaiscript::Boxed_Value>(val);
+                    auto stringified_key = pr_str(chai_to_form(new_key, chai));
+                    new_map.insert(new_map_it, std::pair(stringified_key, new_val));
+                }
+
+                return chaiscript::Boxed_Value(new_map);
+            }
+        case form::SET:
+            {
+                auto set = *std::get<std::shared_ptr<form::FormWrapperSet>>(form);
+                auto new_set = std::map<std::string, chaiscript::Boxed_Value>();
+                auto new_set_it = new_set.begin();
+
+                for (auto it = set.begin(); it != set.end(); ++it) {
+                    auto key = form_to_chai((*it).form, chai);
+                    switch (key.index()) {
+                        case evaled::SPECIAL:
+                            return key;
+                    }
+                    auto new_key = std::get<chaiscript::Boxed_Value>(key);
+                    auto stringified_key = pr_str(chai_to_form(new_key, chai));
+                    new_set.insert(new_set_it, std::pair(stringified_key, new_key));
+                }
+
+                return chaiscript::Boxed_Value(new_set);
+            }
     }
     return form::Special{"RuntimeError", "Form not recognized", std::nullopt};
 }
@@ -194,6 +239,34 @@ form::Form chai_to_form(chaiscript::Boxed_Value bv, chaiscript::ChaiScript* chai
         }
 
         return new_vec;
+    } catch (const chaiscript::exception::bad_boxed_cast &) {}
+
+    try {
+        auto map = chai->boxed_cast<std::map<std::string, chaiscript::Boxed_Value>>(bv);
+        auto new_map = std::make_shared<form::FormWrapperMap>(form::FormWrapperMap{});
+        auto new_set = std::make_shared<form::FormWrapperSet>(form::FormWrapperSet{});
+        auto new_map_it = new_map->begin();
+        auto new_set_it = new_set->begin();
+
+        for (auto it = map.begin(); it != map.end(); ++it) {
+            auto key_str = (*it).first;
+            auto forms = read(key_str);
+            if (forms.size() != 1) {
+                return form::Special{"RuntimeError", "Failed to parse " + std::string(key_str), std::nullopt};
+            }
+            auto key = form::FormWrapper{forms.front()};
+            auto val = form::FormWrapper{chai_to_form((*it).second, chai)};
+            new_map->insert(new_map_it, std::pair(key, val));
+            if (key == val) {
+                new_set->insert(new_set_it, val);
+            }
+        }
+
+        if (new_map->size() == new_set->size()) {
+            return new_set;
+        } else {
+            return new_map;
+        }
     } catch (const chaiscript::exception::bad_boxed_cast &) {}
 
     try {
