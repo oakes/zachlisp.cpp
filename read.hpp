@@ -30,13 +30,13 @@ namespace zachlisp {
         }
 
     const std::regex REGEX(
-        "([\\s,]*)|"                   // type::WHITESPACE
+        "([\\s,]+)|"                   // type::WHITESPACE
         "(~@|#\\{)|"                   // type::SPECIAL_CHARS
         "([\\[\\]{}()\'`~^@])|"        // type::SPECIAL_CHAR
         "(\"(?:\\\\.|[^\\\\\"])*\"?)|" // type::STRING
         "(;.*)|"                       // type::COMMENT
         "(\\d+\\.?\\d*)|"              // type::NUMBER
-        "([^\\s\\[\\]{}(\'\"`,;)]*)"   // type::SYMBOL
+        "([^\\s\\[\\]{}(\'\"`,;)]+)"   // type::SYMBOL
     );
 
     struct Token {
